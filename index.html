@@ -1,470 +1,475 @@
 <!DOCTYPE html>
-<html lang="ja">
-
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARIGATOBANK</title>
-    <script src="js/swiper.animate1.0.2.min.js" type="text/javascript"></script>
-    <script src="js/jquery-1.10.1.min.js" type="text/javascript"></script>
-    <script src="js/swiper-3.4.2.min.js" type="text/javascript"></script>
-    <link rel="stylesheet" href="css/swiper-3.4.2.min.css">
-    <link rel="stylesheet" href="css/animate.min.css">
-    <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8">
+<title>SIX TRIES — a word game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --ink:#1c1b19;
+    --paper:#efe9dd;
+    --paper-dim:#d9d1bf;
+    --rule:#3a3833;
+    --correct:#4c6b4f;
+    --present:#b9932f;
+    --absent:#6b6459;
+    --absent-bg:#2a2823;
+    --accent:#b9491f;
+  }
+
+  *{box-sizing:border-box;}
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:28px 16px 60px;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,0.03), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(255,255,255,0.02), transparent 45%);
+  }
+
+  header{
+    width:100%;
+    max-width:520px;
+    text-align:center;
+    margin-bottom:18px;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:16px;
+  }
+
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-size:11px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--absent);
+    margin-bottom:6px;
+  }
+
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:900;
+    font-style:italic;
+    font-size:44px;
+    letter-spacing:0.01em;
+    margin:0;
+    line-height:1;
+  }
+
+  .sub{
+    margin-top:8px;
+    font-size:12px;
+    color:var(--paper-dim);
+    letter-spacing:0.04em;
+  }
+
+  #board{
+    display:grid;
+    grid-template-rows:repeat(6, 1fr);
+    gap:8px;
+    margin:20px 0 24px;
+  }
+
+  .row{
+    display:grid;
+    grid-template-columns:repeat(5, 54px);
+    gap:8px;
+  }
+
+  .tile{
+    width:54px;
+    height:54px;
+    border:2px solid var(--rule);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:26px;
+    color:var(--paper);
+    text-transform:uppercase;
+    background:transparent;
+    transition:transform 0.15s ease;
+  }
+
+  .tile.filled{
+    border-color:#5a564c;
+    animation:pop 0.1s ease;
+  }
+
+  .tile.flip{
+    animation:flip 0.55s ease forwards;
+  }
+
+  .tile.correct{ background:var(--correct); border-color:var(--correct); color:var(--paper); }
+  .tile.present{ background:var(--present); border-color:var(--present); color:#1c1b19; }
+  .tile.absent{ background:var(--absent-bg); border-color:var(--rule); color:var(--absent); }
+
+  @keyframes pop{
+    0%{ transform:scale(0.9); }
+    100%{ transform:scale(1); }
+  }
+
+  @keyframes flip{
+    0%{ transform:rotateX(0deg); }
+    50%{ transform:rotateX(90deg); }
+    51%{ transform:rotateX(90deg); }
+    100%{ transform:rotateX(0deg); }
+  }
+
+  .shake{ animation:shake 0.4s ease; }
+  @keyframes shake{
+    10%,90%{ transform:translateX(-2px); }
+    20%,80%{ transform:translateX(4px); }
+    30%,50%,70%{ transform:translateX(-8px); }
+    40%,60%{ transform:translateX(8px); }
+  }
+
+  #message{
+    min-height:20px;
+    font-size:13px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:4px;
+    text-align:center;
+  }
+
+  #keyboard{
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+    width:100%;
+    max-width:500px;
+  }
+
+  .krow{
+    display:flex;
+    justify-content:center;
+    gap:5px;
+  }
+
+  .key{
+    background:var(--paper-dim);
+    color:var(--ink);
+    border:none;
+    border-radius:3px;
+    padding:14px 0;
+    flex:1;
+    max-width:40px;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:13px;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:background 0.15s ease, transform 0.05s ease;
+  }
+
+  .key:active{ transform:translateY(1px); }
+
+  .key.wide{ max-width:64px; font-size:11px; }
+
+  .key.correct{ background:var(--correct); color:var(--paper); }
+  .key.present{ background:var(--present); color:#1c1b19; }
+  .key.absent{ background:var(--absent-bg); color:var(--absent); }
+
+  #newgame{
+    margin-top:26px;
+    background:none;
+    border:1.5px solid var(--accent);
+    color:var(--accent);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:12px 26px;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #newgame:hover{ background:var(--accent); color:var(--paper); }
+
+  footer{
+    margin-top:22px;
+    font-size:10px;
+    letter-spacing:0.1em;
+    color:var(--rule);
+    text-transform:uppercase;
+  }
+
+  @media (max-width:380px){
+    .row{ grid-template-columns:repeat(5, 46px); }
+    .tile{ width:46px; height:46px; font-size:22px; }
+    .key{ padding:12px 0; font-size:12px; }
+  }
+</style>
 </head>
+<body>
 
-<body class="index">
-    <!-- 头部 -->
-    <header class="darkmode">
-        <div class="header">
-            <div class="header_inner">
-                <div class="header_logo">
-                    <a href="/index.html"><img src="images/header-logo-darkmode.png" alt="" class="darkmode">
-                        <img src="images/header-logo-lightmode.png" alt="" class="lightmode"></a>
-                </div>
-                <nav class="header_nav">
-                    <ul class="nav_list">
-                        <li><a href="/index.html" class="anchor">HOME</a></li>
-                        <li><a href="/index.html#about" class="anchor">できること
-                                <span class="header_line"></span>
-                            </a>
-                        </li>
-                        <li><a href="/card.html" class="anchor">選べるカード<span class="header_line"></span></a></li>
-                        <li><a href="/index.html#faq" class="anchor">よくあるご質問<span class="header_line"></span></a></li>
-                    </ul>
-                    <div class="nav_button button">
-                        アプリダウンロード
-                    </div>
-                    <div class="header_download">
-                        <h6>
-                            ご利用はkifutownアプリから
-                        </h6>
-                        <ul class="header_downloadList">
-                            <li><a href="javascript:;"><img src="images/icon-store-apple.png" alt=""></a></li>
-                            <li><a href="javascript:;"><img src="images/icon-store-google.png" alt=""></a></li>
-                        </ul>
-                        <p class="header_downloadAnnotation">※"全員お金贈りfrom宇宙"の当選金の受取りに対応したkifutownアプリは、ストアにて順次配信予定です。</p>
-                        <div class="header_kifutownLinkWrapper">
-                            <a href="https://www.kifutown.com/">
-                                <img src="images/footer-kiftownLinkImage.png" alt="">
-                                <span class="header_kifutownLinkText">kifutown.com</span>
-                            </a>
-                        </div>
-                    </div>
-                </nav>
-                <div class="header_menu">
-                </div>
-            </div>
-        </div>
+<header>
+  <div class="masthead">
+    <span>Edition No. <span id="edition">1</span></span>
+    <span id="datestamp"></span>
+  </div>
+  <h1>Six Tries</h1>
+  <div class="sub">Guess the five-letter word. You get six lines.</div>
+</header>
 
-        <div class="header_banner-hd">
-            <img src="images/header-image.svg" alt="">
-        </div>
-        <div class="header_banner">
-            <div class="swiper-container swiper-no-swiping">
-                <div class="swiper-wrapper">
-                    <div class="swiper-slide">
-                        <img src="images/header-background-01.jpg" alt="" class="pconly">
-                        <img src="images/header-background-sp-01.jpg" alt="" class="sponly">
-                    </div>
-                    <div class="swiper-slide">
-                        <img src="images/header-background-02.jpg" alt="" class="pconly">
-                        <img src="images/header-background-sp-02.jpg" alt="" class="sponly">
-                    </div>
-                </div>
-            </div>
-        </div>
+<div id="message"></div>
+<div id="board"></div>
+<div id="keyboard"></div>
+<button id="newgame">Set a new word</button>
+<footer>Green — right spot · Amber — wrong spot · Ash — not in the word</footer>
 
-    </header>
-    <!-- (未解决)拖动时鼠标图标会变  -->
-    <script>
-        var mySwiper01 = new Swiper('header .swiper-container', {
-            autoplay: 5000,//可选选项，自动滑动
-            noSwiping: true,
-            loop: true,
-            speed: 800,
-        })
-        // $(function () {
-        //     $('.anchor').click(function () {
-        //         $('html,body').animate({
-        //             scrollTop: ($($this).attr('href')).offset().top
-        //         }, 1000)
-        //     })
-        // })
-        $('.header_menu').click(function () {
-            $('.header').toggleClass('openMenu')
-        });
-        $('.anchor').click(function () {
-            $('.header').removeClass('openMenu')
-        })
-    </script>
-    <!-- 头部结束 -->
-    <div class="download">
-        <div class="download_mask"></div>
-        <div class="download_inner">
-            <h6>
-                ご利用はkifutownアプリから
-            </h6>
-            <ul class="downloadList">
-                <li><a href="javascript:;"><img src="images/icon-store-apple.png" alt=""></a></li>
-                <li><a href="javascript:;"><img src="images/icon-store-google.png" alt=""></a></li>
-            </ul>
-            <p class="downloadAnnotation">※"全員お金贈りfrom宇宙"の当選金の受取りに対応したkifutownアプリは、ストアにて順次配信予定です。</p>
-            <span class="download_close"></span>
-        </div>
-    </div>
-    <script>
-        $('.nav_button').click(function () {
-            $('.download').addClass('openDownload');
-        });
+<script>
+// Small local fallback in case the network fetch below fails (offline, blocked, etc).
+const FALLBACK_WORDS = ["ABOUT","OTHER","WHICH","THEIR","THERE","FIRST","WOULD","THESE","CLICK","SOUND",
+"WORLD","MUSIC","HAPPY","LIGHT","QUICK","BRAVE","STONE","RIVER","CLOUD","GRAPE",
+"HORSE","TIGER","OCEAN","PLANT","CHESS","BREAD","STORM","FLAME","GLASS","MAGIC"];
 
-        $('.download_close').click(function () {
-            $('.download').removeClass('openDownload');
-        });
-        $('.download_mask').click(function () {
-            $('.download').removeClass('openDownload');
-        });
-    </script>
-    <main class="main">
-        <!-- 关于about -->
-        <section class="about" id="about">
-            <div class="about_inner">
-                <div class="about_text">
-                    <h2>kifutownで
-                        <br>
-                        受取った寄付金を
-                        <br>
-                        すぐにお買い物に
-                        <br>
-                        使えます
-                    </h2>
-                    <p>kifutownで受取った寄付金はネットや街のVisa加盟店で支払いに使えます。年会費無料で誰でも使えるVisaプリペイドカードをkifutownアプリからすぐに利用できます。</p>
-                    <a href="https://www.kifutown.com/" class="about_link underline" target="_blank">kifutownとは?</a>
-                    <a href="/card.html" class="button about_button">選べるカード</a>
-                </div>
-                <div class="about_img">
-                    <span class="about_subtitle"></span>
-                    <div class="swiper-container swiper-no-swiping">
-                        <div class="swiper-wrapper">
-                            <div class="swiper-slide">
-                                <img src="images/about-imageSwiper-01.png" alt="">
-                            </div>
-                            <div class="swiper-slide">
-                                <img src="images/about-imageSwiper-02.png" alt="">
-                            </div>
-                        </div>
-                    </div>
-                    <span class="about_ani_01"></span>
-                    <span class="about_ani_02"></span>
-                    <div class="about_slide_bg">
-                        <img src="images/about-imageSwiper-bg.jpg" alt="" class="about_slide_bg_img">
-                    </div>
-                </div>
-            </div>
-            <ul class="about_list">
-                <li class="about_item">
-                    <img src="images/about-itemImage-01.png" alt="">
-                    <div class="aboutList_text">
-                        <h3>最短1分、誰でもカードが使えます
-                        </h3>
-                        <p>kifutownアプリで登録後すぐにネット専用のVisaプリペイドカードが使えます。年齢制限、審査はありません。</p>
-                    </div>
+const ANSWER_LEN = 5;
+const MAX_TRIES = 6;
 
-                </li>
-                <li class="about_item">
-                    <img src="images/about-itemImage-02.png" alt="">
-                    <div class="aboutList_text">
-                        <h3>入会費・年会費は無料です
-                        </h3>
-                        <p>カードは入会費・年会費無料で気軽に使えます。残高のチャージもクレジットカードやATMから無料で行えます。</p>
-                    </div>
+let ANSWERS = FALLBACK_WORDS;
+let VALID_GUESSES = new Set(FALLBACK_WORDS);
+let wordsReady = false;
 
-                </li>
-                <li class="about_item">
-                    <img src="images/about-itemImage-03.png" alt="">
-                    <div class="aboutList_text">
-                        <h3>世界中のVisa加盟店で使えます
-                        </h3>
-                        <p>ネットショッピングやアプリの支払いだけでなく、街のお店で使えるカードもお申し込みいただけます。</p>
-                        <a href="https://support.kifutown.com/hc/ja/articles/4512484479385"
-                            class="underline about_item_link" target="_blank">一部ご利用いただけない加盟店があります</a>
-                    </div>
+async function loadWordLists(){
+  setMessage("Loading word list…");
+  try{
+    const [answersRes, guessesRes] = await Promise.all([
+      fetch('https://gist.githubusercontent.com/cfreshman/a03ef2cba789d8cf00c08f767e0fad7b/raw/wordle-answers-alphabetical.txt'),
+      fetch('https://gist.githubusercontent.com/cfreshman/cdcdf777450c5b5301e439061d29694c/raw/wordle-allowed-guesses.txt')
+    ]);
+    if(!answersRes.ok || !guessesRes.ok) throw new Error('bad response');
+    const answersText = await answersRes.text();
+    const guessesText = await guessesRes.text();
 
-                </li>
-            </ul>
-        </section>
-        <section class="howtouse">
-            <div class="howtouse_bg">
-                <span class="howtouse_subtitle"></span>
-            </div>
-            <div class="howtouse_textWrapper">
-                <div class="howtouse_text">
-                    <h2>いますぐ始めよう</h2>
-                    <ol class="howtouse_list">
-                        <li class="howtouse_item">
-                            <div class="howtouse_itemImg">
-                                <span class="howtouse_itemImg_num howtouse_itemImg_num01">
-                                    <img src="images/howtouse-itemNumber-background-01.svg" alt="">
-                                </span>
-                                <div class="howtouse_itemImgBox">
-                                    <img src="images/howtouse-itemImage-01.jpg" alt="" class="howtouse_item_image1">
-                                </div>
-                            </div>
-                            <div class="howtouse_itemText">
-                                <h3>kifutownアプリをダウンロードしましょう</h3>
-                                <p>kifutownアプリをダウンロードして、「残高」をタップ。あなたが持っている残高を確認できます。kifutownの寄付金を受取ることもできます。</p>
-                            </div>
-                        </li>
-                        <li class="howtouse_item">
-                            <div class="howtouse_itemImg">
-                                <span class="howtouse_itemImg_num">
-                                    <img src="images/howtouse-itemNumber-background-02.svg" alt="">
-                                </span>
-                                <div class="howtouse_itemImgBox">
-                                    <img src="images/howtouse-itemImage-02.jpg" alt="" class="howtouse_item_image2">
-                                </div>
-                            </div>
+    const answers = answersText.split('\n').map(w=>w.trim().toUpperCase()).filter(w=>w.length===ANSWER_LEN);
+    const guesses = guessesText.split('\n').map(w=>w.trim().toUpperCase()).filter(w=>w.length===ANSWER_LEN);
 
-                            <div class="howtouse_itemText">
-                                <h3>残高はATMやクレジットカードからもチャージできます
-                                </h3>
-                                <p>残高は寄付金の受取りのほか、セブン銀行ATMやクレジットカードからチャージができます。お買い物に必要な金額をチャージしましょう。</p>
-                                <a href="https://support.kifutown.com/hc/ja/articles/4512763822489"
-                                    class="underline howtouse_item_link" target="_blank">残高をチャージするには</a>
-                            </div>
-                        </li>
-                        <li class="howtouse_item">
-                            <div class="howtouse_itemImg">
-                                <span class="howtouse_itemImg_num">
-                                    <img src="images/howtouse-itemNumber-background-03.svg" alt="">
-                                </span>
-                                <div class="howtouse_itemImgBox">
-                                    <img src="images/howtouse-itemImage-03.jpg" alt="" class="howtouse_item_image3">
-                                </div>
-                            </div>
-                            <div class="howtouse_itemText">
-                                <h3>ネットのお店は、ネット専用カードですぐに支払えます</h3>
-                                <p>残高はネットショッピングやアプリの支払いに使うことができます。支払い方法で「クレジットカード」を選択。アプリに表示されるカード情報を入力しましょう。</p>
-                                <a href="https://support.kifutown.com/hc/ja/articles/4512343161753#h_01FWQPKTSXZHEVQJ5MMHFXJWM0"
-                                    class="underline howtouse_item_link" target="_blank">ネットのお店で使うには？</a>
-                            </div>
+    if(answers.length > 100){
+      ANSWERS = answers;
+      VALID_GUESSES = new Set([...answers, ...guesses]);
+    }
+  }catch(e){
+    console.warn('Falling back to local word list:', e);
+    ANSWERS = FALLBACK_WORDS;
+    VALID_GUESSES = new Set(FALLBACK_WORDS);
+  }
+  wordsReady = true;
+  setMessage("");
+  startGame(true);
+}
 
-                        </li>
-                        <li class="howtouse_item">
-                            <div class="howtouse_itemImg">
-                                <span class="howtouse_itemImg_num">
-                                    <img src="images/howtouse-itemNumber-background-04.svg" alt="">
-                                </span>
-                                <div class="howtouse_itemImgBox">
-                                    <img src="images/howtouse-itemImage-04.jpg" alt="" class="howtouse_item_image4">
-                                </div>
-                            </div>
-                            <div class="howtouse_itemText">
-                                <h3>街のお店で使えるカードも申し込めます</h3>
-                                <p>カードを申し込むと、残高を街のお店の支払いに使うことができます。 Visaのマークのあるお店で、「カード払いで」と伝えて支払いましょう。</p>
-                                <a href="https://support.kifutown.com/hc/ja/articles/4512484479385"
-                                    class="underline howtouse_item_link" target="_blank">使えるお店・使えないお店の注意点</a>
-                            </div>
-                        </li>
-                    </ol>
-                </div>
+let answer = "";
+let currentRow = 0;
+let currentGuess = "";
+let gameOver = false;
+let edition = 1;
 
-            </div>
-        </section>
+const board = document.getElementById('board');
+const message = document.getElementById('message');
+const editionEl = document.getElementById('edition');
+const datestampEl = document.getElementById('datestamp');
 
+const KB_ROWS = [
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L"],
+  ["ENTER","Z","X","C","V","B","N","M","BACK"]
+];
 
-        <script>
-            var mySwiper02 = new Swiper('.about .swiper-container', {
-                autoplay: 5000,//可选选项，自动滑动
-                noSwiping: true,
-                loop: true,
-                effect: 'fade',
-                speed: 1000,
-                fade: {
-                    crossFade: true,
-                }
-            })
-        </script>
-    </main>
-    <aside class="faq" id="faq">
-        <h2>よくあるご質問</h2>
-        <ul class="faq_list">
-            <li class="faq_item">
-                <h3 class="faq_itemTitle">ARIGATOBANKカードとは？</h3>
-                <p class="faq_itemText">
-                    ARIGATOBANKカードは、ARIGATOBANK残高を使ってVisa加盟店で支払いができるVisaプリペイドカードです。
-                    <br>
-                    <br>
-                    全員お金贈りで当選したお金や、kifutownでもらった寄付金をARIGATOBANK残高として受取ることで、Visa加盟店で利用できます。またご自身でARIGATOBANK残高をチャージして繰り返し利用できます。
-                </p>
-                <span class="line"></span>
+const keyboard = document.getElementById('keyboard');
 
-            </li>
-            <li class="faq_item">
-                <h3 class="faq_itemTitle">ARIGATOBANKカードの使い方、使える場所は？</h3>
-                <p class="faq_itemText">
-                    ARIGATOBANKカードには、kifutownアプリにカード情報が表示され、すぐにネットのVisa加盟店で使える「ARIGATOBANKカード
-                    ネット専用」と、街のVisa加盟店でも使える「ARIGATOBANKカード ライト」「ARIGATOBANKカード プラス」があります。
-                    <br>
-                    <br>
-                    <a href="https://support.kifutown.com/hc/ja/articles/4512343161753" class="underline faq_item_link"
-                        target="_blank">使い方について</a>
-                    <br>
+function buildBoard(){
+  board.innerHTML = "";
+  for(let r=0;r<MAX_TRIES;r++){
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.id = 'row-'+r;
+    for(let c=0;c<ANSWER_LEN;c++){
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.id = 'tile-'+r+'-'+c;
+      row.appendChild(tile);
+    }
+    board.appendChild(row);
+  }
+}
 
-                    <a href="https://support.kifutown.com/hc/ja/articles/4512484479385" class="underline faq_item_link"
-                        target="_blank">使える場所について</a>
-                </p>
-                <span class="line"></span>
-            </li>
-            <li class="faq_item">
-                <h3 class="faq_itemTitle">カードの発行に費用や年会費かかりますか？</h3>
-                <p class="faq_itemText">
-                    ARIGATOBANKカードは年会費無料です。
-                    <br>
-                    ネットショッピングやアプリで使えるネット専用カードの発行は無料です。街のお店で使えるARIGATOBANKカード ライトおよびプラスの発行には発行手数料がかかります。
-                </p>
-                <span class="line"></span>
+function buildKeyboard(){
+  keyboard.innerHTML = "";
+  KB_ROWS.forEach(rowKeys=>{
+    const krow = document.createElement('div');
+    krow.className = 'krow';
+    rowKeys.forEach(k=>{
+      const btn = document.createElement('button');
+      btn.className = 'key' + ((k==="ENTER"||k==="BACK") ? " wide" : "");
+      btn.textContent = k === "BACK" ? "DEL" : k;
+      btn.id = 'key-'+k;
+      btn.addEventListener('click', ()=>handleKey(k));
+      krow.appendChild(btn);
+    });
+    keyboard.appendChild(krow);
+  });
+}
 
-            </li>
-            <li class="faq_item">
-                <h3 class="faq_itemTitle">残高を増やす（チャージ）方法は？</h3>
-                <p class="faq_itemText">
-                    ARIGATOBANK残高は以下の方法でチャージや受取りができます。
-                    <br><br>
-                    ・全員お金贈りの当選金を受取る
-                    <br>
-                    ・kifutownの寄付金を受取る
-                    <br>
-                    ・ご自身でチャージする(セブン銀行ATM、クレジットカード)
-                    <br>
-                    <br>
-                    <a href="https://support.kifutown.com/hc/ja/articles/4512742991769" class="underline faq_item_link"
-                        target="_blank">残高の詳しい使い方</a>
-                </p>
-                <span class="line"></span>
+function setMessage(text){
+  message.textContent = text;
+}
 
-            </li>
-        </ul>
-        <div class="faq_button">
-            <a href="https://support.kifutown.com/hc/ja/sections/4416661785113" class="button faq_button_link"
-                target="_blank">もっと見る</a>
-        </div>
-    </aside>
-    <script>
-        $(".faq_itemTitle").click(function () {
-            $(this).next().toggle();
-            $(this).toggleClass("open")
-        })
-    </script>
-    <footer class="footer">
-        <div class="footer_inner">
-            <h2 class="footer_title">
-                ご利用は
-                <br>
-                kifutownアプリから
-            </h2>
-            <div class="footer_download">
-                <ul class="footer_downloadList">
-                    <li class="footer_downloadItem">
-                        <a href="https://apps.apple.com/us/app/kifutown/id1572966539">
-                            <img src="images/icon-store-apple.png" alt="">
-                        </a>
-                    </li>
-                    <li class="footer_downloadItem">
-                        <a href="https://play.google.com/store/apps/details?id=jp.co.arigatobank.kifutown">
-                            <img src="images/icon-store-google.png" alt="">
-                        </a>
-                    </li>
-                </ul>
-                <p class="footer_downloadText">※"全員お金贈りfrom宇宙"の当選金の受取りに対応したkifutownアプリは、ストアにて順次配信予定です。</p>
-            </div>
-            <ul class="footer_list">
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113" class="footer_link">ヘルプページ</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113" class="footer_link">利用規約</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113"
-                        class="footer_link">資金決済法に基づく表示</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113"
-                        class="footer_link">反社会勢力に対する基本方針</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113"
-                        class="footer_link">情報セキュリティ基本方針</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113"
-                        class="footer_link">プライバシーポリシー</a>
-                </li>
-                <li class="footer_item">
-                    <a href="https://support.kifutown.com/hc/ja/sections/4416661785113" class="footer_link">運営会社</a>
-                </li>
-            </ul>
-            <a href="https://www.kifutown.com/" class="footer_kifutown" target="_blank">
-                <img src="images/footer-kiftownLinkImage.png" alt="">
-                <span class="footer_kifutownText">kifutown.com</span>
-            </a>
-            <small class="footer_copyright">
-                © ARIGATOBANK, Inc.
-            </small>
-            <img src="images/footer-image.jpg" alt="" class="footer_img">
-            <div class="footer_slideloop">
-                <a href="#" class="footer_pagetop">
-                    <img src="images/footer-pagetop-background.svg" alt="" class="footer_ani01">
-                    <img src="images/footer-pagetop-background.svg" alt="" class="footer_ani02">
-                </a>
-            </div>
-        </div>
-    </footer>
-    <script>
-        var about_slide_bg_img = document.querySelector('.about_slide_bg_img');
-        var howToUse_items1 = document.querySelector('.howtouse_item_image1');
-        var howToUse_items2 = document.querySelector('.howtouse_item_image2');
-        var howToUse_items3 = document.querySelector('.howtouse_item_image3');
-        var howToUse_items4 = document.querySelector('.howtouse_item_image4');
-        function getTop(e) {
-            var offset = e.offsetTop;
-            if (e.offsetParent != null) offset += getTop(e.offsetParent);
-            return offset;
-        }
-        var slide_offset = getTop(about_slide_bg_img);
-        var howToUse_offset1 = getTop(howToUse_items1);
-        var howToUse_offset2 = getTop(howToUse_items2);
-        var howToUse_offset3 = getTop(howToUse_items3);
-        var howToUse_offset4 = getTop(howToUse_items4);
-        console.log(howToUse_offset1);
-        console.log(howToUse_offset2);
-        console.log(howToUse_offset3);
-        console.log(howToUse_offset4);
+function startGame(isFirst){
+  if(!wordsReady) return;
+  answer = ANSWERS[Math.floor(Math.random()*ANSWERS.length)];
+  currentRow = 0;
+  currentGuess = "";
+  gameOver = false;
+  setMessage("");
+  buildBoard();
+  buildKeyboard();
+  if(!isFirst) edition++;
+  editionEl.textContent = edition;
+}
 
-        window.addEventListener('scroll', slideMove);
-        function slideMove() {
-            if (window.pageYOffset > slide_offset - 400 && window.pageYOffset < slide_offset + 100) {
-                about_slide_bg_img.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset1 - 700 && window.pageYOffset < howToUse_offset1 && howToUse_offset1 === howToUse_offset2) {
-                howToUse_items1.classList.add('anim_scale');
-                howToUse_items2.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset1 - 700 && window.pageYOffset < howToUse_offset1) {
-                howToUse_items1.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset2 - 700 && window.pageYOffset < howToUse_offset2) {
-                howToUse_items2.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset3 - 700 && window.pageYOffset < howToUse_offset3 && howToUse_offset3 === howToUse_offset4) {
-                howToUse_items3.classList.add('anim_scale');
-                howToUse_items4.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset3 - 700 && window.pageYOffset < howToUse_offset3) {
-                howToUse_items3.classList.add('anim_scale');
-            } else if (window.pageYOffset > howToUse_offset4 - 700 && window.pageYOffset < howToUse_offset4) {
-                howToUse_items4.classList.add('anim_scale');
-            }
-            // console.log(pageYOffset);
-        }
-    </script>
+function handleKey(k){
+  if(gameOver) return;
+  if(k === "ENTER"){
+    submitGuess();
+  } else if(k === "BACK"){
+    currentGuess = currentGuess.slice(0,-1);
+    renderCurrentRow();
+  } else if(/^[A-Z]$/.test(k) && currentGuess.length < ANSWER_LEN){
+    currentGuess += k;
+    renderCurrentRow();
+  }
+}
+
+function renderCurrentRow(){
+  for(let c=0;c<ANSWER_LEN;c++){
+    const tile = document.getElementById('tile-'+currentRow+'-'+c);
+    const letter = currentGuess[c] || "";
+    tile.textContent = letter;
+    tile.classList.toggle('filled', !!letter);
+  }
+}
+
+function shakeRow(){
+  const row = document.getElementById('row-'+currentRow);
+  row.classList.add('shake');
+  setTimeout(()=>row.classList.remove('shake'), 400);
+}
+
+function submitGuess(){
+  if(currentGuess.length < ANSWER_LEN){
+    setMessage("Not enough letters");
+    shakeRow();
+    return;
+  }
+  if(!VALID_GUESSES.has(currentGuess)){
+    setMessage("Not in word list");
+    shakeRow();
+    return;
+  }
+  setMessage("");
+  const result = scoreGuess(currentGuess, answer);
+  animateRow(result);
+}
+
+function scoreGuess(guess, answer){
+  const result = new Array(ANSWER_LEN).fill('absent');
+  const answerArr = answer.split('');
+  const guessArr = guess.split('');
+  const used = new Array(ANSWER_LEN).fill(false);
+
+  for(let i=0;i<ANSWER_LEN;i++){
+    if(guessArr[i] === answerArr[i]){
+      result[i] = 'correct';
+      used[i] = true;
+    }
+  }
+  for(let i=0;i<ANSWER_LEN;i++){
+    if(result[i] === 'correct') continue;
+    for(let j=0;j<ANSWER_LEN;j++){
+      if(!used[j] && guessArr[i] === answerArr[j]){
+        result[i] = 'present';
+        used[j] = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+function animateRow(result){
+  for(let c=0;c<ANSWER_LEN;c++){
+    const tile = document.getElementById('tile-'+currentRow+'-'+c);
+    setTimeout(()=>{
+      tile.classList.add('flip');
+      setTimeout(()=>{
+        tile.classList.add(result[c]);
+      }, 275);
+    }, c*280);
+  }
+
+  const letter_to_state = {};
+  currentGuess.split('').forEach((ch,i)=>{
+    const state = result[i];
+    const existing = letter_to_state[ch];
+    const rank = {absent:0, present:1, correct:2};
+    if(!existing || rank[state] > rank[existing]){
+      letter_to_state[ch] = state;
+    }
+  });
+
+  setTimeout(()=>{
+    Object.keys(letter_to_state).forEach(ch=>{
+      const btn = document.getElementById('key-'+ch);
+      if(btn){
+        btn.classList.remove('correct','present','absent');
+        btn.classList.add(letter_to_state[ch]);
+      }
+    });
+
+    if(currentGuess === answer){
+      gameOver = true;
+      const lines = ["Sharp.", "Excellent.", "Well read.", "Nicely done.", "Bravo.", "Clean solve."];
+      setMessage(lines[Math.min(currentRow, lines.length-1)] + "  The word was " + answer + ".");
+    } else if(currentRow === MAX_TRIES-1){
+      gameOver = true;
+      setMessage("Out of tries. The word was " + answer + ".");
+    } else {
+      currentRow++;
+      currentGuess = "";
+    }
+  }, ANSWER_LEN*280 + 300);
+}
+
+document.addEventListener('keydown', (e)=>{
+  const key = e.key.toUpperCase();
+  if(key === "ENTER") handleKey("ENTER");
+  else if(key === "BACKSPACE") handleKey("BACK");
+  else if(/^[A-Z]$/.test(key)) handleKey(key);
+});
+
+document.getElementById('newgame').addEventListener('click', ()=>startGame(false));
+
+const today = new Date();
+datestampEl.textContent = today.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase();
+
+buildBoard();
+buildKeyboard();
+loadWordLists();
+</script>
+
 </body>
-
 </html>
