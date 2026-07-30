@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>SIX TRIES — a word game</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
@@ -17,6 +18,10 @@
     --absent:#6b6459;
     --absent-bg:#2a2823;
     --accent:#b9491f;
+  }
+
+  html, body{
+    touch-action: manipulation;
   }
 
   *{box-sizing:border-box;}
@@ -71,6 +76,15 @@
     font-size:12px;
     color:var(--paper-dim);
     letter-spacing:0.04em;
+  }
+
+  #timer{
+    margin-top:10px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:20px;
+    font-weight:600;
+    letter-spacing:0.06em;
+    color:var(--present);
   }
 
   #board{
@@ -207,6 +221,198 @@
     text-transform:uppercase;
   }
 
+  #authbar{
+    width:100%;
+    max-width:520px;
+    margin-bottom:14px;
+    font-size:12px;
+  }
+
+  #authform{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    border:1px solid var(--rule);
+    padding:14px;
+  }
+
+  #authform .authform-row{
+    display:flex;
+    gap:8px;
+  }
+
+  #authform input{
+    flex:1;
+    min-width:0;
+    background:var(--absent-bg);
+    border:1px solid var(--rule);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:16px;
+    padding:9px 10px;
+    border-radius:3px;
+  }
+  #authform input::placeholder{ color:var(--absent); }
+  #authform input:focus{ outline:1.5px solid var(--accent); }
+
+  #authform .authform-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+
+  #auth-submit{
+    background:var(--accent);
+    border:1.5px solid var(--accent);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:9px 16px;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  #auth-submit:hover{ opacity:0.85; }
+
+  #auth-toggle{
+    background:none;
+    border:none;
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+
+  #auth-error{
+    font-size:11px;
+    color:var(--accent);
+    min-height:14px;
+  }
+
+  #userinfo{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    flex-wrap:wrap;
+    color:var(--paper-dim);
+    border:1px solid var(--rule);
+    padding:12px 14px;
+  }
+
+  #signout-btn, #myscore-btn{
+    background:none;
+    border:1.5px solid var(--paper-dim);
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:8px 14px;
+    cursor:pointer;
+    border-radius:3px;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #signout-btn:hover, #myscore-btn:hover{ background:var(--paper-dim); color:var(--ink); }
+
+  #user-name{
+    margin-right:auto;
+  }
+
+  #actionbar{
+    display:flex;
+    gap:12px;
+    margin-top:26px;
+  }
+
+  #leaderboard-btn{
+    background:none;
+    border:1.5px solid var(--paper-dim);
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:12px 22px;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #leaderboard-btn:hover{ background:var(--paper-dim); color:var(--ink); }
+
+  #lb-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.65);
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  #lb-overlay.open{ display:flex; }
+
+  #lb-panel{
+    background:var(--ink);
+    border:1.5px solid var(--rule);
+    max-width:420px;
+    width:100%;
+    max-height:80vh;
+    overflow-y:auto;
+    padding:22px;
+  }
+
+  #lb-panel h2{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:900;
+    font-size:24px;
+    margin:0 0 4px;
+  }
+
+  #lb-panel .lb-sub{
+    font-size:11px;
+    color:var(--absent);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:16px;
+  }
+
+  .lb-row{
+    display:grid;
+    grid-template-columns:24px 1fr 50px 60px;
+    gap:8px;
+    align-items:center;
+    padding:8px 0;
+    border-bottom:1px solid var(--rule);
+    font-size:12px;
+  }
+  .lb-row.me{ color:var(--accent); }
+  .lb-rank{ color:var(--absent); }
+  .lb-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  #lb-close{
+    margin-top:16px;
+    width:100%;
+    background:none;
+    border:1.5px solid var(--accent);
+    color:var(--accent);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:10px;
+    cursor:pointer;
+  }
+  #lb-close:hover{ background:var(--accent); color:var(--paper); }
+
   @media (max-width:380px){
     .row{ grid-template-columns:repeat(5, 46px); }
     .tile{ width:46px; height:46px; font-size:22px; }
@@ -223,15 +429,299 @@
   </div>
   <h1>Six Tries</h1>
   <div class="sub">Guess the five-letter word. You get six lines.</div>
+  <div id="timer">0:00.0</div>
 </header>
+
+<div id="authbar">
+  <form id="authform">
+    <div class="authform-row" id="name-row" style="display:none;">
+      <input type="text" id="auth-name" placeholder="Display name" autocomplete="name">
+    </div>
+    <div class="authform-row">
+      <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+    </div>
+    <div class="authform-actions">
+      <button type="submit" id="auth-submit">Log in</button>
+      <button type="button" id="auth-toggle">Need an account? Sign up</button>
+    </div>
+    <div id="auth-error"></div>
+  </form>
+  <div id="userinfo" style="display:none;">
+    <span id="user-name"></span>
+    <button id="myscore-btn" type="button">My Score</button>
+    <button id="signout-btn">Sign out</button>
+  </div>
+</div>
 
 <div id="message"></div>
 <div id="board"></div>
 <div id="keyboard"></div>
-<button id="newgame">Set a new word</button>
+<div id="actionbar">
+  <button id="newgame">Set a new word</button>
+  <button id="leaderboard-btn">Leaderboard</button>
+</div>
 <footer>Green — right spot · Amber — wrong spot · Ash — not in the word</footer>
 
+<div id="lb-overlay">
+  <div id="lb-panel">
+    <h2 id="lb-title">Top Solvers</h2>
+    <div class="lb-sub" id="lb-subtitle">Ranked by fewest tries, then fastest time</div>
+    <div id="lb-list">Loading…</div>
+    <button id="lb-close">Close</button>
+  </div>
+</div>
+
+<!-- Firebase (compat SDK — plain script tags, no build step needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script>
+// ============================================================
+// PASTE YOUR FIREBASE CONFIG HERE (Project settings > your web app)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDvG6332Cv80BquFauULZebnm2gmFGqZ6Y",
+  authDomain: "wordle-72684.firebaseapp.com",
+  projectId: "wordle-72684",
+  storageBucket: "wordle-72684.firebasestorage.app",
+  messagingSenderId: "739361469009",
+  appId: "1:739361469009:web:88efe9c8cbab56de44fe70",
+  measurementId: "G-1CMGQMMYF1"
+};
+
+let firebaseEnabled = true;
+let auth, db;
+try{
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+}catch(e){
+  console.warn("Firebase not configured yet — sign-in and leaderboard are disabled.", e);
+  firebaseEnabled = false;
+}
+
+let currentUser = null;
+
+function initAuthUI(){
+  const authform = document.getElementById('authform');
+  const nameRow = document.getElementById('name-row');
+  const nameInput = document.getElementById('auth-name');
+  const emailInput = document.getElementById('auth-email');
+  const passwordInput = document.getElementById('auth-password');
+  const submitBtn = document.getElementById('auth-submit');
+  const toggleBtn = document.getElementById('auth-toggle');
+  const errorEl = document.getElementById('auth-error');
+  const signoutBtn = document.getElementById('signout-btn');
+  const userinfo = document.getElementById('userinfo');
+  const nameEl = document.getElementById('user-name');
+
+  let mode = 'login'; // 'login' or 'signup'
+
+  if(!firebaseEnabled){
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Not configured";
+    toggleBtn.style.display = 'none';
+    errorEl.textContent = "Sign-in isn't set up yet.";
+    return;
+  }
+
+  toggleBtn.addEventListener('click', ()=>{
+    mode = mode === 'login' ? 'signup' : 'login';
+    nameRow.style.display = mode === 'signup' ? 'flex' : 'none';
+    submitBtn.textContent = mode === 'signup' ? 'Create account' : 'Log in';
+    toggleBtn.textContent = mode === 'signup' ? 'Have an account? Log in' : 'Need an account? Sign up';
+    errorEl.textContent = "";
+  });
+
+  authform.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    errorEl.textContent = "";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if(!email || !password){
+      errorEl.textContent = "Enter an email and password.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    try{
+      if(mode === 'signup'){
+        const displayName = nameInput.value.trim() || email.split('@')[0];
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName });
+        currentUser = cred.user; // updateProfile doesn't refresh onAuthStateChanged's user object synchronously
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+      authform.reset();
+    }catch(err){
+      errorEl.textContent = friendlyAuthError(err);
+    }
+    submitBtn.disabled = false;
+  });
+
+  signoutBtn.addEventListener('click', ()=> auth.signOut());
+
+  auth.onAuthStateChanged(user=>{
+    currentUser = user;
+    if(user){
+      authform.style.display = 'none';
+      userinfo.style.display = 'flex';
+      nameEl.textContent = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
+    } else {
+      authform.style.display = 'flex';
+      userinfo.style.display = 'none';
+    }
+  });
+}
+
+function friendlyAuthError(err){
+  const map = {
+    'auth/email-already-in-use': "That email already has an account. Try logging in instead.",
+    'auth/invalid-email': "That email address doesn't look right.",
+    'auth/weak-password': "Password should be at least 6 characters.",
+    'auth/wrong-password': "Wrong password.",
+    'auth/invalid-credential': "Email or password is incorrect.",
+    'auth/user-not-found': "No account found with that email.",
+    'auth/too-many-requests': "Too many attempts. Wait a bit and try again."
+  };
+  return map[err.code] || "Something went wrong. Try again.";
+}
+
+async function saveScoreIfBest(tries, timeSeconds){
+  if(!firebaseEnabled || !currentUser) return;
+  const ref = db.collection('scores').doc(currentUser.uid);
+  try{
+    const doc = await ref.get();
+    const existing = doc.exists ? doc.data() : null;
+    const isBetter = !existing
+      || tries < existing.tries
+      || (tries === existing.tries && timeSeconds < existing.timeSeconds);
+    if(isBetter){
+      await ref.set({
+        displayName: currentUser.displayName || 'Player',
+        photoURL: currentUser.photoURL || '',
+        tries: tries,
+        timeSeconds: Math.round(timeSeconds * 10) / 10,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  }catch(e){
+    console.error("Could not save score:", e);
+  }
+}
+
+async function loadLeaderboard(){
+  document.getElementById('lb-title').textContent = "Top Solvers";
+  document.getElementById('lb-subtitle').textContent = "Ranked by fewest tries, then fastest time";
+  const list = document.getElementById('lb-list');
+  if(!firebaseEnabled){
+    list.textContent = "Leaderboard isn't set up yet.";
+    return;
+  }
+  list.textContent = "Loading…";
+  try{
+    const snap = await db.collection('scores')
+      .orderBy('tries', 'asc')
+      .orderBy('timeSeconds', 'asc')
+      .limit(20)
+      .get();
+
+    if(snap.empty){
+      list.textContent = "No scores yet. Be the first to finish a game.";
+      return;
+    }
+
+    list.innerHTML = "";
+    let rank = 0;
+    snap.forEach(doc=>{
+      rank++;
+      const d = doc.data();
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (currentUser && doc.id === currentUser.uid ? ' me' : '');
+      row.innerHTML =
+        '<span class="lb-rank">'+rank+'</span>'+
+        '<span class="lb-name">'+escapeHtml(d.displayName || 'Player')+'</span>'+
+        '<span>'+d.tries+' try'+(d.tries===1?'':'s')+'</span>'+
+        '<span>'+d.timeSeconds.toFixed(1)+'s</span>';
+      list.appendChild(row);
+    });
+  }catch(e){
+    console.error(e);
+    list.textContent = "Couldn't load the leaderboard. Check console for details (Firestore may need a composite index — the first error in the console will have a direct link to create it).";
+  }
+}
+
+async function loadMyScore(){
+  document.getElementById('lb-title').textContent = "Your Best";
+  document.getElementById('lb-subtitle').textContent = "Your personal record, and how it ranks";
+  const list = document.getElementById('lb-list');
+
+  if(!firebaseEnabled){
+    list.textContent = "Scores aren't set up yet.";
+    return;
+  }
+  if(!currentUser){
+    list.textContent = "Sign in to see your score.";
+    return;
+  }
+
+  list.textContent = "Loading…";
+  try{
+    const myDoc = await db.collection('scores').doc(currentUser.uid).get();
+    if(!myDoc.exists){
+      list.textContent = "You haven't finished a game yet. Solve one to set your first score.";
+      return;
+    }
+    const mine = myDoc.data();
+
+    // Count how many scores are strictly better, to compute rank.
+    const betterByTries = await db.collection('scores').where('tries', '<', mine.tries).get();
+    const sameTries = await db.collection('scores')
+      .where('tries', '==', mine.tries)
+      .where('timeSeconds', '<', mine.timeSeconds)
+      .get();
+    const rank = betterByTries.size + sameTries.size + 1;
+
+    list.innerHTML = "";
+    const row = document.createElement('div');
+    row.className = 'lb-row me';
+    row.innerHTML =
+      '<span class="lb-rank">'+rank+'</span>'+
+      '<span class="lb-name">'+escapeHtml(mine.displayName || 'Player')+'</span>'+
+      '<span>'+mine.tries+' try'+(mine.tries===1?'':'s')+'</span>'+
+      '<span>'+mine.timeSeconds.toFixed(1)+'s</span>';
+    list.appendChild(row);
+  }catch(e){
+    console.error(e);
+    list.textContent = "Couldn't load your score. Check console for details (this may also need a Firestore index — look for a create-index link in the console).";
+  }
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('leaderboard-btn').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.add('open');
+  loadLeaderboard();
+});
+document.getElementById('myscore-btn').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.add('open');
+  loadMyScore();
+});
+document.getElementById('lb-close').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.remove('open');
+});
+document.getElementById('lb-overlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'lb-overlay') document.getElementById('lb-overlay').classList.remove('open');
+});
+
 // Small local fallback in case the network fetch below fails (offline, blocked, etc).
 const FALLBACK_WORDS = ["ABOUT","OTHER","WHICH","THEIR","THERE","FIRST","WOULD","THESE","CLICK","SOUND",
 "WORLD","MUSIC","HAPPY","LIGHT","QUICK","BRAVE","STONE","RIVER","CLOUD","GRAPE",
@@ -277,11 +767,36 @@ let currentRow = 0;
 let currentGuess = "";
 let gameOver = false;
 let edition = 1;
+let gameStartTime = null;
 
 const board = document.getElementById('board');
 const message = document.getElementById('message');
 const editionEl = document.getElementById('edition');
 const datestampEl = document.getElementById('datestamp');
+const timerEl = document.getElementById('timer');
+let timerInterval = null;
+
+function formatTime(seconds){
+  const m = Math.floor(seconds/60);
+  const s = (seconds - m*60);
+  return m + ':' + s.toFixed(1).padStart(4,'0');
+}
+
+function startTimer(){
+  stopTimer();
+  timerEl.textContent = "0:00.0";
+  timerInterval = setInterval(()=>{
+    const elapsed = (Date.now() - gameStartTime) / 1000;
+    timerEl.textContent = formatTime(elapsed);
+  }, 100);
+}
+
+function stopTimer(){
+  if(timerInterval){
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
 
 const KB_ROWS = [
   ["Q","W","E","R","T","Y","U","I","O","P"],
@@ -334,11 +849,14 @@ function startGame(isFirst){
   currentRow = 0;
   currentGuess = "";
   gameOver = false;
+  gameStartTime = Date.now();
   setMessage("");
   buildBoard();
   buildKeyboard();
+  startTimer();
   if(!isFirst) edition++;
   editionEl.textContent = edition;
+  console.log(answer);
 }
 
 function handleKey(k){
@@ -442,10 +960,21 @@ function animateRow(result){
 
     if(currentGuess === answer){
       gameOver = true;
+      stopTimer();
+      const tries = currentRow + 1;
+      const timeSeconds = (Date.now() - gameStartTime) / 1000;
+      timerEl.textContent = formatTime(timeSeconds);
       const lines = ["Sharp.", "Excellent.", "Well read.", "Nicely done.", "Bravo.", "Clean solve."];
-      setMessage(lines[Math.min(currentRow, lines.length-1)] + "  The word was " + answer + ".");
+      let msg = lines[Math.min(currentRow, lines.length-1)] + "  " + tries + " tries, " + timeSeconds.toFixed(1) + "s.";
+      if(currentUser){
+        saveScoreIfBest(tries, timeSeconds);
+      } else if(firebaseEnabled){
+        msg += "  Sign in to save your score.";
+      }
+      setMessage(msg);
     } else if(currentRow === MAX_TRIES-1){
       gameOver = true;
+      stopTimer();
       setMessage("Out of tries. The word was " + answer + ".");
     } else {
       currentRow++;
@@ -469,6 +998,7 @@ datestampEl.textContent = today.toLocaleDateString('en-US', { month:'short', day
 buildBoard();
 buildKeyboard();
 loadWordLists();
+initAuthUI();
 </script>
 
 </body>
