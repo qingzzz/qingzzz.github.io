@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SIX TRIES — a word game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --ink:#1c1b19;
+    --paper:#efe9dd;
+    --paper-dim:#d9d1bf;
+    --rule:#3a3833;
+    --correct:#4c6b4f;
+    --present:#b9932f;
+    --absent:#6b6459;
+    --absent-bg:#2a2823;
+    --accent:#b9491f;
+  }
+
+  html, body{
+    touch-action: manipulation;
+  }
+
+  *{box-sizing:border-box;}
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:28px 16px 60px;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,0.03), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(255,255,255,0.02), transparent 45%);
+  }
+
+  header{
+    width:100%;
+    max-width:520px;
+    text-align:center;
+    margin-bottom:18px;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:16px;
+  }
+
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-size:11px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--absent);
+    margin-bottom:6px;
+  }
+
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:900;
+    font-style:italic;
+    font-size:44px;
+    letter-spacing:0.01em;
+    margin:0;
+    line-height:1;
+  }
+
+  .sub{
+    margin-top:8px;
+    font-size:12px;
+    color:var(--paper-dim);
+    letter-spacing:0.04em;
+  }
+
+  #timer{
+    margin-top:10px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:20px;
+    font-weight:600;
+    letter-spacing:0.06em;
+    color:var(--present);
+  }
+
+  #board{
+    display:grid;
+    grid-template-rows:repeat(6, 1fr);
+    gap:8px;
+    margin:20px 0 24px;
+  }
+
+  .row{
+    display:grid;
+    grid-template-columns:repeat(5, 54px);
+    gap:8px;
+  }
+
+  .tile{
+    width:54px;
+    height:54px;
+    border:2px solid var(--rule);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:26px;
+    color:var(--paper);
+    text-transform:uppercase;
+    background:transparent;
+    transition:transform 0.15s ease;
+  }
+
+  .tile.filled{
+    border-color:#5a564c;
+    animation:pop 0.1s ease;
+  }
+
+  .tile.flip{
+    animation:flip 0.55s ease forwards;
+  }
+
+  .tile.correct{ background:var(--correct); border-color:var(--correct); color:var(--paper); }
+  .tile.present{ background:var(--present); border-color:var(--present); color:#1c1b19; }
+  .tile.absent{ background:var(--absent-bg); border-color:var(--rule); color:var(--absent); }
+
+  @keyframes pop{
+    0%{ transform:scale(0.9); }
+    100%{ transform:scale(1); }
+  }
+
+  @keyframes flip{
+    0%{ transform:rotateX(0deg); }
+    50%{ transform:rotateX(90deg); }
+    51%{ transform:rotateX(90deg); }
+    100%{ transform:rotateX(0deg); }
+  }
+
+  .shake{ animation:shake 0.4s ease; }
+  @keyframes shake{
+    10%,90%{ transform:translateX(-2px); }
+    20%,80%{ transform:translateX(4px); }
+    30%,50%,70%{ transform:translateX(-8px); }
+    40%,60%{ transform:translateX(8px); }
+  }
+
+  #message{
+    min-height:20px;
+    font-size:13px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:4px;
+    text-align:center;
+  }
+
+  #definition{
+    max-width:420px;
+    margin:0 auto 10px;
+    font-size:12px;
+    line-height:1.5;
+    color:var(--paper-dim);
+    text-align:center;
+    text-transform:none;
+    letter-spacing:normal;
+  }
+  #definition .dword{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:600;
+    color:var(--present);
+  }
+
+  #keyboard{
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+    width:100%;
+    max-width:500px;
+  }
+
+  .krow{
+    display:flex;
+    justify-content:center;
+    gap:5px;
+  }
+
+  .key{
+    background:var(--paper-dim);
+    color:var(--ink);
+    border:none;
+    border-radius:3px;
+    padding:14px 0;
+    flex:1;
+    max-width:40px;
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:13px;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:background 0.15s ease, transform 0.05s ease;
+  }
+
+  .key:active{ transform:translateY(1px); }
+
+  .key.wide{ max-width:64px; font-size:11px; }
+
+  .key.correct{ background:var(--correct); color:var(--paper); }
+  .key.present{ background:var(--present); color:#1c1b19; }
+  .key.absent{ background:var(--absent-bg); color:var(--absent); }
+
+  #newgame{
+    margin-top:26px;
+    background:none;
+    border:1.5px solid var(--accent);
+    color:var(--accent);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:12px 26px;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #newgame:hover{ background:var(--accent); color:var(--paper); }
+
+  footer{
+    margin-top:22px;
+    font-size:10px;
+    letter-spacing:0.1em;
+    color:var(--rule);
+    text-transform:uppercase;
+  }
+
+  #authbar{
+    width:100%;
+    max-width:520px;
+    margin-bottom:14px;
+    font-size:12px;
+  }
+
+  #authform{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    border:1px solid var(--rule);
+    padding:14px;
+  }
+
+  #authform .authform-row{
+    display:flex;
+    gap:8px;
+  }
+
+  #authform input{
+    flex:1;
+    min-width:0;
+    background:var(--absent-bg);
+    border:1px solid var(--rule);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:16px;
+    padding:9px 10px;
+    border-radius:3px;
+  }
+  #authform input::placeholder{ color:var(--absent); }
+  #authform input:focus{ outline:1.5px solid var(--accent); }
+
+  #authform .authform-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+
+  #auth-submit{
+    background:var(--accent);
+    border:1.5px solid var(--accent);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:9px 16px;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  #auth-submit:hover{ opacity:0.85; }
+
+  #auth-toggle{
+    background:none;
+    border:none;
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+
+  #auth-error{
+    font-size:11px;
+    color:var(--accent);
+    min-height:14px;
+  }
+
+  #userinfo{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    flex-wrap:wrap;
+    color:var(--paper-dim);
+    border:1px solid var(--rule);
+    padding:12px 14px;
+  }
+
+  #signout-btn, #myscore-btn{
+    background:none;
+    border:1.5px solid var(--paper-dim);
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:8px 14px;
+    cursor:pointer;
+    border-radius:3px;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #signout-btn:hover, #myscore-btn:hover{ background:var(--paper-dim); color:var(--ink); }
+
+  #user-name{
+    margin-right:auto;
+  }
+
+  #actionbar{
+    display:flex;
+    gap:12px;
+    margin-top:26px;
+  }
+
+  #leaderboard-btn{
+    background:none;
+    border:1.5px solid var(--paper-dim);
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:12px 22px;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  #leaderboard-btn:hover{ background:var(--paper-dim); color:var(--ink); }
+
+  #lb-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.65);
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  #lb-overlay.open{ display:flex; }
+
+  #lb-panel{
+    background:var(--ink);
+    border:1.5px solid var(--rule);
+    max-width:420px;
+    width:100%;
+    max-height:80vh;
+    overflow-y:auto;
+    padding:22px;
+  }
+
+  #lb-panel h2{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:900;
+    font-size:24px;
+    margin:0 0 4px;
+  }
+
+  #lb-panel .lb-sub{
+    font-size:11px;
+    color:var(--absent);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:16px;
+  }
+
+  .lb-row{
+    display:grid;
+    grid-template-columns:24px 1fr 50px 60px;
+    gap:8px;
+    align-items:center;
+    padding:8px 0;
+    border-bottom:1px solid var(--rule);
+    font-size:12px;
+  }
+  .lb-row.me{ color:var(--accent); }
+  .lb-rank{ color:var(--absent); }
+  .lb-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  #lb-close{
+    margin-top:16px;
+    width:100%;
+    background:none;
+    border:1.5px solid var(--accent);
+    color:var(--accent);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:10px;
+    cursor:pointer;
+  }
+  #lb-close:hover{ background:var(--accent); color:var(--paper); }
+
+  @media (max-width:380px){
+    .row{ grid-template-columns:repeat(5, 46px); }
+    .tile{ width:46px; height:46px; font-size:22px; }
+    .key{ padding:12px 0; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="./index.html" style="align-self:flex-start; max-width:520px; width:100%; color:var(--paper-dim); font-size:11px; text-decoration:none; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:10px; display:block;">&larr; All games</a>
+
+<header>
+  <div class="masthead">
+    <span>Edition No. <span id="edition">1</span></span>
+    <span id="datestamp"></span>
+  </div>
+  <h1>Six Tries</h1>
+  <div class="sub">Guess the five-letter word. You get six lines.</div>
+  <div id="timer">0:00.0</div>
+</header>
+
+<div id="authbar">
+  <form id="authform">
+    <div class="authform-row" id="name-row" style="display:none;">
+      <input type="text" id="auth-name" placeholder="Display name" autocomplete="name">
+    </div>
+    <div class="authform-row">
+      <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+    </div>
+    <div class="authform-actions">
+      <button type="submit" id="auth-submit">Log in</button>
+      <button type="button" id="auth-toggle">Need an account? Sign up</button>
+    </div>
+    <div id="auth-error"></div>
+  </form>
+  <div id="userinfo" style="display:none;">
+    <span id="user-name"></span>
+    <button id="myscore-btn" type="button">My Score</button>
+    <button id="signout-btn">Sign out</button>
+  </div>
+</div>
+
+<div id="message"></div>
+<div id="definition"></div>
+<div id="board"></div>
+<div id="keyboard"></div>
+<div id="actionbar">
+  <button id="newgame">Set a new word</button>
+  <button id="leaderboard-btn">Leaderboard</button>
+</div>
+<footer>Green — right spot · Amber — wrong spot · Ash — not in the word</footer>
+
+<div id="lb-overlay">
+  <div id="lb-panel">
+    <h2 id="lb-title">Top Solvers</h2>
+    <div class="lb-sub" id="lb-subtitle">Ranked by fewest tries, then fastest time</div>
+    <div id="lb-list">Loading…</div>
+    <button id="lb-close">Close</button>
+  </div>
+</div>
+
+<!-- Firebase (compat SDK — plain script tags, no build step needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+// ============================================================
+// PASTE YOUR FIREBASE CONFIG HERE (Project settings > your web app)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDvG6332Cv80BquFauULZebnm2gmFGqZ6Y",
+  authDomain: "wordle-72684.firebaseapp.com",
+  projectId: "wordle-72684",
+  storageBucket: "wordle-72684.firebasestorage.app",
+  messagingSenderId: "739361469009",
+  appId: "1:739361469009:web:88efe9c8cbab56de44fe70",
+  measurementId: "G-1CMGQMMYF1"
+};
+
+let firebaseEnabled = true;
+let auth, db;
+try{
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+}catch(e){
+  console.warn("Firebase not configured yet — sign-in and leaderboard are disabled.", e);
+  firebaseEnabled = false;
+}
+
+let currentUser = null;
+
+function initAuthUI(){
+  const authform = document.getElementById('authform');
+  const nameRow = document.getElementById('name-row');
+  const nameInput = document.getElementById('auth-name');
+  const emailInput = document.getElementById('auth-email');
+  const passwordInput = document.getElementById('auth-password');
+  const submitBtn = document.getElementById('auth-submit');
+  const toggleBtn = document.getElementById('auth-toggle');
+  const errorEl = document.getElementById('auth-error');
+  const signoutBtn = document.getElementById('signout-btn');
+  const userinfo = document.getElementById('userinfo');
+  const nameEl = document.getElementById('user-name');
+
+  let mode = 'login'; // 'login' or 'signup'
+
+  if(!firebaseEnabled){
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Not configured";
+    toggleBtn.style.display = 'none';
+    errorEl.textContent = "Sign-in isn't set up yet.";
+    return;
+  }
+
+  toggleBtn.addEventListener('click', ()=>{
+    mode = mode === 'login' ? 'signup' : 'login';
+    nameRow.style.display = mode === 'signup' ? 'flex' : 'none';
+    submitBtn.textContent = mode === 'signup' ? 'Create account' : 'Log in';
+    toggleBtn.textContent = mode === 'signup' ? 'Have an account? Log in' : 'Need an account? Sign up';
+    errorEl.textContent = "";
+  });
+
+  authform.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    errorEl.textContent = "";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if(!email || !password){
+      errorEl.textContent = "Enter an email and password.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    try{
+      if(mode === 'signup'){
+        const displayName = nameInput.value.trim() || email.split('@')[0];
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName });
+        currentUser = cred.user; // updateProfile doesn't refresh onAuthStateChanged's user object synchronously
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+      authform.reset();
+    }catch(err){
+      errorEl.textContent = friendlyAuthError(err);
+    }
+    submitBtn.disabled = false;
+  });
+
+  signoutBtn.addEventListener('click', ()=> auth.signOut());
+
+  auth.onAuthStateChanged(user=>{
+    currentUser = user;
+    if(user){
+      authform.style.display = 'none';
+      userinfo.style.display = 'flex';
+      nameEl.textContent = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
+    } else {
+      authform.style.display = 'flex';
+      userinfo.style.display = 'none';
+    }
+  });
+}
+
+function friendlyAuthError(err){
+  const map = {
+    'auth/email-already-in-use': "That email already has an account. Try logging in instead.",
+    'auth/invalid-email': "That email address doesn't look right.",
+    'auth/weak-password': "Password should be at least 6 characters.",
+    'auth/wrong-password': "Wrong password.",
+    'auth/invalid-credential': "Email or password is incorrect.",
+    'auth/user-not-found': "No account found with that email.",
+    'auth/too-many-requests': "Too many attempts. Wait a bit and try again."
+  };
+  return map[err.code] || "Something went wrong. Try again.";
+}
+
+async function saveScoreIfBest(tries, timeSeconds){
+  if(!firebaseEnabled || !currentUser) return;
+  const ref = db.collection('scores').doc(currentUser.uid);
+  try{
+    const doc = await ref.get();
+    const existing = doc.exists ? doc.data() : null;
+    const isBetter = !existing
+      || tries < existing.tries
+      || (tries === existing.tries && timeSeconds < existing.timeSeconds);
+    if(isBetter){
+      await ref.set({
+        displayName: currentUser.displayName || 'Player',
+        photoURL: currentUser.photoURL || '',
+        tries: tries,
+        timeSeconds: Math.round(timeSeconds * 10) / 10,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  }catch(e){
+    console.error("Could not save score:", e);
+  }
+}
+
+async function loadLeaderboard(){
+  document.getElementById('lb-title').textContent = "Top Solvers";
+  document.getElementById('lb-subtitle').textContent = "Ranked by fewest tries, then fastest time";
+  const list = document.getElementById('lb-list');
+  if(!firebaseEnabled){
+    list.textContent = "Leaderboard isn't set up yet.";
+    return;
+  }
+  list.textContent = "Loading…";
+  try{
+    const snap = await db.collection('scores')
+      .orderBy('tries', 'asc')
+      .orderBy('timeSeconds', 'asc')
+      .limit(20)
+      .get();
+
+    if(snap.empty){
+      list.textContent = "No scores yet. Be the first to finish a game.";
+      return;
+    }
+
+    list.innerHTML = "";
+    let rank = 0;
+    snap.forEach(doc=>{
+      rank++;
+      const d = doc.data();
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (currentUser && doc.id === currentUser.uid ? ' me' : '');
+      row.innerHTML =
+        '<span class="lb-rank">'+rank+'</span>'+
+        '<span class="lb-name">'+escapeHtml(d.displayName || 'Player')+'</span>'+
+        '<span>'+d.tries+' try'+(d.tries===1?'':'s')+'</span>'+
+        '<span>'+d.timeSeconds.toFixed(1)+'s</span>';
+      list.appendChild(row);
+    });
+  }catch(e){
+    console.error(e);
+    list.textContent = "Couldn't load the leaderboard. Check console for details (Firestore may need a composite index — the first error in the console will have a direct link to create it).";
+  }
+}
+
+async function loadMyScore(){
+  document.getElementById('lb-title').textContent = "Your Best";
+  document.getElementById('lb-subtitle').textContent = "Your personal record, and how it ranks";
+  const list = document.getElementById('lb-list');
+
+  if(!firebaseEnabled){
+    list.textContent = "Scores aren't set up yet.";
+    return;
+  }
+  if(!currentUser){
+    list.textContent = "Sign in to see your score.";
+    return;
+  }
+
+  list.textContent = "Loading…";
+  try{
+    const myDoc = await db.collection('scores').doc(currentUser.uid).get();
+    if(!myDoc.exists){
+      list.textContent = "You haven't finished a game yet. Solve one to set your first score.";
+      return;
+    }
+    const mine = myDoc.data();
+
+    // Count how many scores are strictly better, to compute rank.
+    const betterByTries = await db.collection('scores').where('tries', '<', mine.tries).get();
+    const sameTries = await db.collection('scores')
+      .where('tries', '==', mine.tries)
+      .where('timeSeconds', '<', mine.timeSeconds)
+      .get();
+    const rank = betterByTries.size + sameTries.size + 1;
+
+    list.innerHTML = "";
+    const row = document.createElement('div');
+    row.className = 'lb-row me';
+    row.innerHTML =
+      '<span class="lb-rank">'+rank+'</span>'+
+      '<span class="lb-name">'+escapeHtml(mine.displayName || 'Player')+'</span>'+
+      '<span>'+mine.tries+' try'+(mine.tries===1?'':'s')+'</span>'+
+      '<span>'+mine.timeSeconds.toFixed(1)+'s</span>';
+    list.appendChild(row);
+  }catch(e){
+    console.error(e);
+    list.textContent = "Couldn't load your score. Check console for details (this may also need a Firestore index — look for a create-index link in the console).";
+  }
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('leaderboard-btn').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.add('open');
+  loadLeaderboard();
+});
+document.getElementById('myscore-btn').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.add('open');
+  loadMyScore();
+});
+document.getElementById('lb-close').addEventListener('click', ()=>{
+  document.getElementById('lb-overlay').classList.remove('open');
+});
+document.getElementById('lb-overlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'lb-overlay') document.getElementById('lb-overlay').classList.remove('open');
+});
+
+// Small local fallback in case the network fetch below fails (offline, blocked, etc).
+const FALLBACK_WORDS = ["ABOUT","OTHER","WHICH","THEIR","THERE","FIRST","WOULD","THESE","CLICK","SOUND",
+"WORLD","MUSIC","HAPPY","LIGHT","QUICK","BRAVE","STONE","RIVER","CLOUD","GRAPE",
+"HORSE","TIGER","OCEAN","PLANT","CHESS","BREAD","STORM","FLAME","GLASS","MAGIC"];
+
+const ANSWER_LEN = 5;
+const MAX_TRIES = 6;
+
+let ANSWERS = FALLBACK_WORDS;
+let VALID_GUESSES = new Set(FALLBACK_WORDS);
+let wordsReady = false;
+
+async function loadWordLists(){
+  setMessage("Loading word list…");
+  try{
+    const [answersRes, guessesRes] = await Promise.all([
+      fetch('https://gist.githubusercontent.com/cfreshman/a03ef2cba789d8cf00c08f767e0fad7b/raw/wordle-answers-alphabetical.txt'),
+      fetch('https://gist.githubusercontent.com/cfreshman/cdcdf777450c5b5301e439061d29694c/raw/wordle-allowed-guesses.txt')
+    ]);
+    if(!answersRes.ok || !guessesRes.ok) throw new Error('bad response');
+    const answersText = await answersRes.text();
+    const guessesText = await guessesRes.text();
+
+    const answers = answersText.split('\n').map(w=>w.trim().toUpperCase()).filter(w=>w.length===ANSWER_LEN);
+    const guesses = guessesText.split('\n').map(w=>w.trim().toUpperCase()).filter(w=>w.length===ANSWER_LEN);
+
+    if(answers.length > 100){
+      ANSWERS = answers;
+      VALID_GUESSES = new Set([...answers, ...guesses]);
+    }
+  }catch(e){
+    console.warn('Falling back to local word list:', e);
+    ANSWERS = FALLBACK_WORDS;
+    VALID_GUESSES = new Set(FALLBACK_WORDS);
+  }
+  wordsReady = true;
+  setMessage("");
+  startGame(true);
+}
+
+let answer = "";
+let currentRow = 0;
+let currentGuess = "";
+let gameOver = false;
+let edition = 1;
+let gameStartTime = null;
+
+const board = document.getElementById('board');
+const message = document.getElementById('message');
+const editionEl = document.getElementById('edition');
+const datestampEl = document.getElementById('datestamp');
+const timerEl = document.getElementById('timer');
+let timerInterval = null;
+
+function formatTime(seconds){
+  const m = Math.floor(seconds/60);
+  const s = (seconds - m*60);
+  return m + ':' + s.toFixed(1).padStart(4,'0');
+}
+
+function startTimer(){
+  stopTimer();
+  timerEl.textContent = "0:00.0";
+  timerInterval = setInterval(()=>{
+    const elapsed = (Date.now() - gameStartTime) / 1000;
+    timerEl.textContent = formatTime(elapsed);
+  }, 100);
+}
+
+function stopTimer(){
+  if(timerInterval){
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+const KB_ROWS = [
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L"],
+  ["ENTER","Z","X","C","V","B","N","M","BACK"]
+];
+
+const keyboard = document.getElementById('keyboard');
+
+function buildBoard(){
+  board.innerHTML = "";
+  for(let r=0;r<MAX_TRIES;r++){
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.id = 'row-'+r;
+    for(let c=0;c<ANSWER_LEN;c++){
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.id = 'tile-'+r+'-'+c;
+      row.appendChild(tile);
+    }
+    board.appendChild(row);
+  }
+}
+
+function buildKeyboard(){
+  keyboard.innerHTML = "";
+  KB_ROWS.forEach(rowKeys=>{
+    const krow = document.createElement('div');
+    krow.className = 'krow';
+    rowKeys.forEach(k=>{
+      const btn = document.createElement('button');
+      btn.className = 'key' + ((k==="ENTER"||k==="BACK") ? " wide" : "");
+      btn.textContent = k === "BACK" ? "DEL" : k;
+      btn.id = 'key-'+k;
+      btn.addEventListener('click', ()=>handleKey(k));
+      krow.appendChild(btn);
+    });
+    keyboard.appendChild(krow);
+  });
+}
+
+function setMessage(text){
+  message.textContent = text;
+}
+
+async function showDefinition(word){
+  const el = document.getElementById('definition');
+  el.textContent = "Looking up " + word + "…";
+  try{
+    const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + word.toLowerCase());
+    if(!res.ok) throw new Error('not found');
+    const data = await res.json();
+    const meaning = data[0] && data[0].meanings && data[0].meanings[0];
+    const def = meaning && meaning.definitions && meaning.definitions[0] && meaning.definitions[0].definition;
+    const pos = meaning && meaning.partOfSpeech;
+    if(def){
+      el.innerHTML = '<span class="dword">' + word.charAt(0) + word.slice(1).toLowerCase() + '</span>' +
+        (pos ? ' <em>(' + pos + ')</em> — ' : ' — ') + def;
+    } else {
+      el.textContent = "";
+    }
+  }catch(e){
+    el.textContent = "";
+  }
+}
+
+function startGame(isFirst){
+  if(!wordsReady) return;
+  answer = ANSWERS[Math.floor(Math.random()*ANSWERS.length)];
+  currentRow = 0;
+  currentGuess = "";
+  gameOver = false;
+  gameStartTime = Date.now();
+  setMessage("");
+  document.getElementById('definition').textContent = "";
+  buildBoard();
+  buildKeyboard();
+  startTimer();
+  if(!isFirst) edition++;
+  editionEl.textContent = edition;
+}
+
+function handleKey(k){
+  if(gameOver) return;
+  if(k === "ENTER"){
+    submitGuess();
+  } else if(k === "BACK"){
+    currentGuess = currentGuess.slice(0,-1);
+    renderCurrentRow();
+  } else if(/^[A-Z]$/.test(k) && currentGuess.length < ANSWER_LEN){
+    currentGuess += k;
+    renderCurrentRow();
+  }
+}
+
+function renderCurrentRow(){
+  for(let c=0;c<ANSWER_LEN;c++){
+    const tile = document.getElementById('tile-'+currentRow+'-'+c);
+    const letter = currentGuess[c] || "";
+    tile.textContent = letter;
+    tile.classList.toggle('filled', !!letter);
+  }
+}
+
+function shakeRow(){
+  const row = document.getElementById('row-'+currentRow);
+  row.classList.add('shake');
+  setTimeout(()=>row.classList.remove('shake'), 400);
+}
+
+function submitGuess(){
+  if(currentGuess.length < ANSWER_LEN){
+    setMessage("Not enough letters");
+    shakeRow();
+    return;
+  }
+  if(!VALID_GUESSES.has(currentGuess)){
+    setMessage("Not in word list");
+    shakeRow();
+    return;
+  }
+  setMessage("");
+  const result = scoreGuess(currentGuess, answer);
+  animateRow(result);
+}
+
+function scoreGuess(guess, answer){
+  const result = new Array(ANSWER_LEN).fill('absent');
+  const answerArr = answer.split('');
+  const guessArr = guess.split('');
+  const used = new Array(ANSWER_LEN).fill(false);
+
+  for(let i=0;i<ANSWER_LEN;i++){
+    if(guessArr[i] === answerArr[i]){
+      result[i] = 'correct';
+      used[i] = true;
+    }
+  }
+  for(let i=0;i<ANSWER_LEN;i++){
+    if(result[i] === 'correct') continue;
+    for(let j=0;j<ANSWER_LEN;j++){
+      if(!used[j] && guessArr[i] === answerArr[j]){
+        result[i] = 'present';
+        used[j] = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+function animateRow(result){
+  for(let c=0;c<ANSWER_LEN;c++){
+    const tile = document.getElementById('tile-'+currentRow+'-'+c);
+    setTimeout(()=>{
+      tile.classList.add('flip');
+      setTimeout(()=>{
+        tile.classList.add(result[c]);
+      }, 275);
+    }, c*280);
+  }
+
+  const letter_to_state = {};
+  currentGuess.split('').forEach((ch,i)=>{
+    const state = result[i];
+    const existing = letter_to_state[ch];
+    const rank = {absent:0, present:1, correct:2};
+    if(!existing || rank[state] > rank[existing]){
+      letter_to_state[ch] = state;
+    }
+  });
+
+  setTimeout(()=>{
+    Object.keys(letter_to_state).forEach(ch=>{
+      const btn = document.getElementById('key-'+ch);
+      if(btn){
+        btn.classList.remove('correct','present','absent');
+        btn.classList.add(letter_to_state[ch]);
+      }
+    });
+
+    if(currentGuess === answer){
+      gameOver = true;
+      stopTimer();
+      const tries = currentRow + 1;
+      const timeSeconds = (Date.now() - gameStartTime) / 1000;
+      timerEl.textContent = formatTime(timeSeconds);
+      const lines = ["Sharp.", "Excellent.", "Well read.", "Nicely done.", "Bravo.", "Clean solve."];
+      let msg = lines[Math.min(currentRow, lines.length-1)] + "  " + tries + " tries, " + timeSeconds.toFixed(1) + "s.";
+      if(currentUser){
+        saveScoreIfBest(tries, timeSeconds);
+      } else if(firebaseEnabled){
+        msg += "  Sign in to save your score.";
+      }
+      setMessage(msg);
+      showDefinition(answer);
+    } else if(currentRow === MAX_TRIES-1){
+      gameOver = true;
+      stopTimer();
+      setMessage("Out of tries. The word was " + answer + ".");
+      showDefinition(answer);
+    } else {
+      currentRow++;
+      currentGuess = "";
+    }
+  }, ANSWER_LEN*280 + 300);
+}
+
+document.addEventListener('keydown', (e)=>{
+  const key = e.key.toUpperCase();
+  if(key === "ENTER") handleKey("ENTER");
+  else if(key === "BACKSPACE") handleKey("BACK");
+  else if(/^[A-Z]$/.test(key)) handleKey(key);
+});
+
+document.getElementById('newgame').addEventListener('click', ()=>startGame(false));
+
+const today = new Date();
+datestampEl.textContent = today.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase();
+
+buildBoard();
+buildKeyboard();
+loadWordLists();
+initAuthUI();
+</script>
+
+</body>
+</html>
