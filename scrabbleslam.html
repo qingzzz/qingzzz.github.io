@@ -197,6 +197,13 @@
   .player-row.host::after{ content:"HOST"; font-size:9px; color:var(--present); letter-spacing:0.1em; }
   .player-row.you{ border-color:var(--accent); }
   .player-row .count{ color:var(--absent); font-size:11px; }
+  .stuck-tag{
+    font-size:9px;
+    color:var(--accent);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-left:6px;
+  }
 
   #center-word{
     display:flex;
@@ -220,9 +227,14 @@
   }
   .center-tile.armed{ border-color:var(--present); transform:translateY(-3px); }
   .center-tile.flash{ animation:flashgood 0.5s ease; }
+  .center-tile.flash-reshuffle{ animation:flashreshuffle 0.7s ease; }
   @keyframes flashgood{
     0%{ background:var(--correct); }
     100%{ background:var(--absent-bg); }
+  }
+  @keyframes flashreshuffle{
+    0%{ background:var(--accent); border-color:var(--accent); }
+    100%{ background:var(--absent-bg); border-color:var(--rule); }
   }
 
   #last-move{
@@ -256,6 +268,73 @@
     transition:border-color 0.15s ease, transform 0.1s ease;
   }
   .hand-tile.armed{ border-color:var(--accent); transform:translateY(-4px); }
+  .hand-tile.blank{
+    background:var(--present);
+    color:var(--ink);
+    border-color:var(--present);
+  }
+  .hand-tile.blank.armed{ border-color:var(--accent); }
+
+  #blank-picker{
+    display:none;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:6px;
+    margin:14px 0;
+    padding:12px;
+    border:1.5px dashed var(--present);
+  }
+  .blank-letter-btn{
+    width:36px;
+    height:36px;
+    border:1.5px solid var(--present);
+    background:var(--absent-bg);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  .blank-letter-btn:hover{ background:var(--present); color:var(--ink); }
+  .blank-cancel-btn{
+    padding:0 14px;
+    height:36px;
+    border:1.5px solid var(--paper-dim);
+    background:none;
+    color:var(--paper-dim);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  .blank-cancel-btn:hover{ background:var(--paper-dim); color:var(--ink); }
+
+  #toast{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translate(-50%, 20px);
+    background:var(--accent);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    padding:12px 18px;
+    border-radius:4px;
+    max-width:90vw;
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.2s ease, transform 0.2s ease;
+    z-index:200;
+  }
+  #toast.show{
+    opacity:1;
+    transform:translate(-50%, 0);
+  }
 
   #game-message{
     text-align:center;
@@ -371,11 +450,14 @@
   <div id="center-word"></div>
   <div id="last-move"></div>
   <div id="hand"></div>
-  <div class="hint">Tap a letter in your hand, then tap a tile in the word to swap it in.</div>
+  <div id="blank-picker" style="display:none;"></div>
+  <div class="hint">Tap a letter in your hand, then tap a tile in the word to swap it in. The ★ tile is a blank — it can stand for any letter.</div>
   <div class="row-gap" style="margin-top:14px;">
     <button class="ghost" id="leave-game-btn">Leave Room</button>
   </div>
 </div>
+
+<div id="toast"></div>
 
 <footer>Real-time via Firestore · scores are not saved for this game</footer>
 
@@ -591,8 +673,10 @@ const WORDS4 = [
 ];
 const WORD4_SET = new Set(WORDS4);
 
-// Simplified Scrabble-style letter distribution for the draw deck
-const LETTER_POOL = "EEEEEEEEEEEEAAAAAAAAAIIIIIIIIIOOOOOOOONNNNNNRRRRRRTTTTTTLLLLSSSSUUUUDDDDGGGBBCCMMPPFFHHVVWWYYKJXQZ";
+// Simplified Scrabble-style letter distribution for the draw deck.
+// "?" is a blank — it can stand in for any letter when played.
+const LETTER_POOL = "EEEEEEEEEEEEAAAAAAAAAIIIIIIIIIOOOOOOOONNNNNNRRRRRRTTTTTTLLLLSSSSUUUUDDDDGGGBBCCMMPPFFHHVVWWYYKJXQZ????";
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
 
 let roomCode = null;
 let roomRef = null;
@@ -600,9 +684,11 @@ let myHandRef = null;
 let unsubRoom = null;
 let unsubHand = null;
 let myHand = [];
+let handLoaded = false;
 let armedHandIndex = null;
 let armedPos = null;
 let isHost = false;
+let lastRenderedCenterWord = null;
 
 function shuffle(arr){
   const a = arr.slice();
@@ -779,7 +865,7 @@ async function startGame(ref){
   players.forEach(p=>{
     const hand = deck.slice(idx, idx+7);
     idx += 7;
-    newPlayers.push({ uid: p.uid, name: p.name, handCount: hand.length });
+    newPlayers.push({ uid: p.uid, name: p.name, handCount: hand.length, stuck: false });
     const handRef = ref.collection('hands').doc(p.uid);
     batch.set(handRef, { letters: hand });
   });
@@ -792,6 +878,7 @@ async function startGame(ref){
     winnerUid: null
   });
 
+  lastRenderedCenterWord = null;
   await batch.commit();
 }
 
@@ -806,18 +893,36 @@ function showGame(data){
   data.players.forEach(p=>{
     const row = document.createElement('div');
     row.className = 'player-row' + (p.uid === data.hostUid ? ' host' : '') + (p.uid === currentUser.uid ? ' you' : '');
-    row.innerHTML = '<span>'+escapeHtml(p.name)+(p.uid === currentUser.uid ? ' (you)' : '')+'</span><span class="count">'+p.handCount+' left</span>';
+    const stuckTag = p.stuck ? ' <span class="stuck-tag">no moves</span>' : '';
+    row.innerHTML = '<span>'+escapeHtml(p.name)+(p.uid === currentUser.uid ? ' (you)' : '')+stuckTag+'</span><span class="count">'+p.handCount+' left</span>';
     list.appendChild(row);
   });
 
+  const wordChanged = lastRenderedCenterWord !== null && lastRenderedCenterWord !== data.centerWord;
   renderCenterWord(data.centerWord);
 
   const lastMoveEl = document.getElementById('last-move');
-  if(data.lastMove){
-    lastMoveEl.textContent = data.lastMove.name + " played " + data.lastMove.letterIn + " \u2192 " + data.lastMove.word;
+  if(data.lastMove && data.lastMove.reshuffle){
+    lastMoveEl.textContent = "No one had a move \u2014 the table reshuffled the word.";
+  } else if(data.lastMove){
+    const blankNote = data.lastMove.wasBlank ? " (blank)" : "";
+    lastMoveEl.textContent = data.lastMove.name + " played " + data.lastMove.letterIn + blankNote + " \u2192 " + data.lastMove.word;
   } else {
     lastMoveEl.textContent = "";
   }
+
+  if(wordChanged){
+    closeBlankPicker();
+    armedHandIndex = null;
+    armedPos = null;
+    if(data.lastMove && data.lastMove.reshuffle){
+      flashCenter('reshuffle');
+      showToast("No one had a playable letter \u2014 word reshuffled to " + data.centerWord + "!");
+    } else {
+      flashCenter('normal');
+    }
+  }
+  lastRenderedCenterWord = data.centerWord;
 
   const winBanner = document.getElementById('win-banner');
   const rematchBtn = document.getElementById('rematch-btn');
@@ -838,13 +943,17 @@ function showGame(data){
     if(unsubHand) unsubHand();
     unsubHand = myHandRef.onSnapshot(doc=>{
       myHand = doc.exists ? (doc.data().letters || []) : [];
+      handLoaded = true;
       armedHandIndex = null;
       armedPos = null;
       renderHand();
+      syncStuckStatus();
     }, err=>{
       console.error('Hand listener error:', err);
       setGameMessage("Couldn't sync your hand (" + err.code + "). Try reloading.");
     });
+  } else if(data.status === 'playing'){
+    syncStuckStatus();
   }
 }
 
@@ -864,9 +973,11 @@ function renderHand(){
   const el = document.getElementById('hand');
   el.innerHTML = "";
   myHand.forEach((letter, i)=>{
+    const isBlank = letter === '?';
     const tile = document.createElement('div');
-    tile.className = 'hand-tile' + (armedHandIndex === i ? ' armed' : '');
-    tile.textContent = letter;
+    tile.className = 'hand-tile' + (armedHandIndex === i ? ' armed' : '') + (isBlank ? ' blank' : '');
+    tile.textContent = isBlank ? '★' : letter;
+    tile.title = isBlank ? 'Blank — stands for any letter' : '';
     tile.addEventListener('click', ()=> onHandPicked(i));
     el.appendChild(tile);
   });
@@ -884,43 +995,126 @@ function onTilePicked(pos){
   maybeAttemptSwap();
 }
 
-async function maybeAttemptSwap(){
-  if(armedHandIndex === null || armedPos === null) return;
-  const letter = myHand[armedHandIndex];
-  const pos = armedPos;
+function clearArmed(){
   armedHandIndex = null;
   armedPos = null;
+  renderHand();
+  if(roomRef) roomRef.get().then(doc=> doc.exists && renderCenterWord(doc.data().centerWord));
+}
 
+async function maybeAttemptSwap(){
+  if(armedHandIndex === null || armedPos === null) return;
+  const handIndex = armedHandIndex;
+  const pos = armedPos;
+  const letter = myHand[handIndex];
+
+  if(letter === '?'){
+    await openBlankPicker(handIndex, pos);
+    return;
+  }
+
+  armedHandIndex = null;
+  armedPos = null;
   setGameMessage("");
+  await attemptSwap(handIndex, pos, letter);
+}
 
+async function openBlankPicker(handIndex, pos){
+  setGameMessage("Choose a letter for your blank\u2026");
+  let word;
+  try{
+    const doc = await roomRef.get();
+    word = doc.data().centerWord;
+  }catch(e){
+    setGameMessage("Couldn't load the word — try again.");
+    clearArmed();
+    return;
+  }
+
+  const options = ALPHABET.filter(L=>{
+    if(word[pos] === L) return false;
+    const candidate = word.slice(0, pos) + L + word.slice(pos+1);
+    return WORD4_SET.has(candidate);
+  });
+
+  if(options.length === 0){
+    setGameMessage("No word fits there with a blank — try a different letter or spot.");
+    clearArmed();
+    return;
+  }
+
+  renderBlankPicker(options, handIndex, pos);
+}
+
+function renderBlankPicker(options, handIndex, pos){
+  const panel = document.getElementById('blank-picker');
+  panel.innerHTML = "";
+  panel.style.display = 'flex';
+  options.forEach(L=>{
+    const btn = document.createElement('button');
+    btn.className = 'blank-letter-btn';
+    btn.textContent = L;
+    btn.addEventListener('click', async ()=>{
+      closeBlankPicker();
+      armedHandIndex = null;
+      armedPos = null;
+      setGameMessage("");
+      await attemptSwap(handIndex, pos, L);
+    });
+    panel.appendChild(btn);
+  });
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'blank-cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', ()=>{
+    closeBlankPicker();
+    setGameMessage("");
+    clearArmed();
+  });
+  panel.appendChild(cancelBtn);
+}
+
+function closeBlankPicker(){
+  const panel = document.getElementById('blank-picker');
+  panel.style.display = 'none';
+  panel.innerHTML = "";
+}
+
+async function attemptSwap(handIndex, pos, placeLetter){
   try{
     await db.runTransaction(async (tx)=>{
       const roomDoc = await tx.get(roomRef);
       const handDoc = await tx.get(myHandRef);
       const data = roomDoc.data();
       const hand = handDoc.data().letters;
+      const cardPlayed = hand[handIndex]; // '?' for a blank, a plain letter otherwise
 
       if(data.status !== 'playing') throw new Error('not-playing');
+      if(cardPlayed === undefined) throw new Error('letter-gone');
 
       const word = data.centerWord;
-      if(word[pos] === letter) throw new Error('no-change');
+      if(word[pos] === placeLetter) throw new Error('no-change');
 
-      const candidate = word.slice(0, pos) + letter + word.slice(pos+1);
+      const candidate = word.slice(0, pos) + placeLetter + word.slice(pos+1);
       if(!WORD4_SET.has(candidate)) throw new Error('invalid-word');
 
       const newHand = hand.slice();
-      const idxInHand = newHand.indexOf(letter);
-      if(idxInHand === -1) throw new Error('letter-gone'); // someone else's snapshot raced us — shouldn't happen since hand is private
-      newHand.splice(idxInHand, 1);
+      newHand.splice(handIndex, 1);
 
       const newPlayers = data.players.map(p=>
-        p.uid === currentUser.uid ? { ...p, handCount: newHand.length } : p
+        p.uid === currentUser.uid ? { ...p, handCount: newHand.length, stuck: false } : p
       );
 
       const update = {
         centerWord: candidate,
         players: newPlayers,
-        lastMove: { by: currentUser.uid, name: currentUser.displayName || 'Player', letterIn: letter, word: candidate }
+        lastMove: {
+          by: currentUser.uid,
+          name: currentUser.displayName || 'Player',
+          letterIn: placeLetter,
+          word: candidate,
+          wasBlank: cardPlayed === '?'
+        }
       };
 
       if(newHand.length === 0){
@@ -931,7 +1125,7 @@ async function maybeAttemptSwap(){
       tx.update(roomRef, update);
       tx.update(myHandRef, { letters: newHand });
     });
-    flashCenter();
+    flashCenter('normal');
   }catch(e){
     if(e.message === 'invalid-word'){
       setGameMessage("Not a word — try again.");
@@ -946,12 +1140,74 @@ async function maybeAttemptSwap(){
   }
 }
 
-function flashCenter(){
+// ---------- Stuck detection: reshuffle when nobody has a move ----------
+
+function hasValidMove(hand, word){
+  if(!word) return false;
+  for(const card of hand){
+    const candidates = card === '?' ? ALPHABET : [card];
+    for(const L of candidates){
+      for(let pos=0; pos<4; pos++){
+        if(word[pos] === L) continue;
+        const candidate = word.slice(0, pos) + L + word.slice(pos+1);
+        if(WORD4_SET.has(candidate)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function syncStuckStatus(){
+  if(!handLoaded || !roomRef || !myHandRef || !currentUser) return;
+  try{
+    await db.runTransaction(async (tx)=>{
+      const roomDoc = await tx.get(roomRef);
+      if(!roomDoc.exists) return;
+      const data = roomDoc.data();
+      if(data.status !== 'playing') return;
+
+      const word = data.centerWord;
+      const iAmStuck = !hasValidMove(myHand, word);
+      const me = data.players.find(p=>p.uid === currentUser.uid);
+      if(!me || me.stuck === iAmStuck) return; // nothing changed, skip the write
+
+      const newPlayers = data.players.map(p=>
+        p.uid === currentUser.uid ? { ...p, stuck: iAmStuck } : p
+      );
+      const allStuck = newPlayers.length > 0 && newPlayers.every(p=>p.stuck === true);
+
+      if(allStuck){
+        let newWord;
+        do{ newWord = WORDS4[Math.floor(Math.random() * WORDS4.length)]; } while(newWord === word);
+        tx.update(roomRef, {
+          centerWord: newWord,
+          players: newPlayers.map(p=>({ ...p, stuck: false })),
+          lastMove: { reshuffle: true, word: newWord }
+        });
+      } else {
+        tx.update(roomRef, { players: newPlayers });
+      }
+    });
+  }catch(e){
+    console.error('Stuck-status sync failed:', e);
+  }
+}
+
+function flashCenter(kind){
   const tiles = document.querySelectorAll('.center-tile');
+  const cls = kind === 'reshuffle' ? 'flash-reshuffle' : 'flash';
   tiles.forEach(t=>{
-    t.classList.add('flash');
-    setTimeout(()=>t.classList.remove('flash'), 500);
+    t.classList.add(cls);
+    setTimeout(()=>t.classList.remove(cls), 700);
   });
+}
+
+function showToast(msg){
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=> toast.classList.remove('show'), 3200);
 }
 
 function setGameMessage(msg){
@@ -1004,8 +1260,11 @@ function resetToLobby(msg){
   roomRef = null;
   myHandRef = null;
   myHand = [];
+  handLoaded = false;
   armedHandIndex = null;
   armedPos = null;
+  lastRenderedCenterWord = null;
+  closeBlankPicker();
   document.getElementById('lobby-panel').style.display = 'block';
   document.getElementById('room-panel').style.display = 'none';
   document.getElementById('game-panel').style.display = 'none';
