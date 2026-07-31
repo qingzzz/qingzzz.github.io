@@ -721,6 +721,9 @@ function listenToRoom(){
     } else if(data.status === 'playing' || data.status === 'finished'){
       showGame(data);
     }
+  }, err=>{
+    console.error('Room listener error:', err);
+    setGameMessage("Lost connection to the room (" + err.code + "). Try reloading.");
   });
 }
 
@@ -838,6 +841,9 @@ function showGame(data){
       armedHandIndex = null;
       armedPos = null;
       renderHand();
+    }, err=>{
+      console.error('Hand listener error:', err);
+      setGameMessage("Couldn't sync your hand (" + err.code + "). Try reloading.");
     });
   }
 }
