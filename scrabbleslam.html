@@ -750,7 +750,16 @@ function showWaitingRoom(data){
 }
 
 document.getElementById('start-game-btn').addEventListener('click', async ()=>{
-  await startGame(roomRef);
+  const startBtn = document.getElementById('start-game-btn');
+  startBtn.disabled = true;
+  try{
+    await startGame(roomRef);
+  }catch(e){
+    console.error(e);
+    document.getElementById('waiting-hint').textContent =
+      "Couldn't start the game (permission error). Check that your Firestore rules allow dealing hands — see setup notes.";
+  }
+  startBtn.disabled = false;
 });
 
 async function startGame(ref){
@@ -943,8 +952,15 @@ function setGameMessage(msg){
   document.getElementById('game-message').textContent = msg;
 }
 
-document.getElementById('rematch-btn').addEventListener('click', async ()=>{
-  await startGame(roomRef);
+document.getElementById('rematch-btn').addEventListener('click', async (e)=>{
+  e.target.disabled = true;
+  try{
+    await startGame(roomRef);
+  }catch(err){
+    console.error(err);
+    setGameMessage("Couldn't start a new round (permission error) — see setup notes.");
+  }
+  e.target.disabled = false;
 });
 
 // ---------- Leaving ----------
