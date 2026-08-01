@@ -54,6 +54,9 @@ function initAuthUI(){
   const signoutBtn = document.getElementById('signout-btn');
   const userinfo = document.getElementById('userinfo');
   const nameEl = document.getElementById('user-name');
+  const guestRow = document.getElementById('guest-row');
+  const guestNameInput = document.getElementById('guest-name');
+  const guestBtn = document.getElementById('guest-btn');
 
   if(!authform) return; // page doesn't have an auth bar
 
@@ -64,6 +67,7 @@ function initAuthUI(){
     submitBtn.textContent = "Not configured";
     toggleBtn.style.display = 'none';
     errorEl.textContent = "Sign-in isn't set up yet.";
+    if(guestBtn) guestBtn.disabled = true;
     return;
   }
 
@@ -100,16 +104,42 @@ function initAuthUI(){
     submitBtn.disabled = false;
   });
 
+  if(guestBtn){
+    guestBtn.addEventListener('click', async ()=>{
+      errorEl.textContent = "";
+      const name = guestNameInput.value.trim();
+      if(!name){
+        errorEl.textContent = "Enter a display name to play as a guest.";
+        return;
+      }
+      guestBtn.disabled = true;
+      try{
+        const cred = await auth.signInAnonymously();
+        await cred.user.updateProfile({ displayName: name });
+        // updateProfile doesn't refresh the user object onAuthStateChanged already fired with,
+        // so make sure the app sees the name right away.
+        window.currentUser = auth.currentUser;
+        nameEl.textContent = name;
+        document.dispatchEvent(new CustomEvent('authchange', { detail: { user: auth.currentUser } }));
+      }catch(err){
+        errorEl.textContent = friendlyAuthError(err);
+      }
+      guestBtn.disabled = false;
+    });
+  }
+
   signoutBtn.addEventListener('click', ()=> auth.signOut());
 
   auth.onAuthStateChanged(user=>{
     window.currentUser = user;
     if(user){
       authform.style.display = 'none';
+      if(guestRow) guestRow.style.display = 'none';
       userinfo.style.display = 'flex';
       nameEl.textContent = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
     } else {
       authform.style.display = 'flex';
+      if(guestRow) guestRow.style.display = 'flex';
       userinfo.style.display = 'none';
     }
     document.dispatchEvent(new CustomEvent('authchange', { detail: { user } }));

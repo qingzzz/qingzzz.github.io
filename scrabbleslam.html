@@ -312,6 +312,75 @@
   }
   .blank-cancel-btn:hover{ background:var(--paper-dim); color:var(--ink); }
 
+  #turn-banner{
+    text-align:center;
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:700;
+    font-size:18px;
+    color:var(--paper-dim);
+    margin:4px 0 2px;
+  }
+  #turn-banner.mine{
+    color:var(--present);
+    animation:pulseturn 1.4s ease-in-out infinite;
+  }
+  @keyframes pulseturn{
+    0%, 100%{ opacity:1; }
+    50%{ opacity:0.55; }
+  }
+
+  #turn-counter{
+    text-align:center;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--absent);
+    margin-bottom:10px;
+  }
+
+  #center-word-wrap.locked, #hand-wrap.locked{
+    opacity:0.4;
+    pointer-events:none;
+  }
+
+  .player-row.turn{
+    border-color:var(--present);
+  }
+  .player-row.turn::before{
+    content:"▶";
+    color:var(--present);
+    margin-right:6px;
+  }
+
+  #guest-row input{
+    flex:1;
+    min-width:0;
+    background:var(--absent-bg);
+    border:1px solid var(--rule);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:16px;
+    padding:9px 10px;
+    border-radius:3px;
+  }
+  #guest-row input::placeholder{ color:var(--absent); }
+  #guest-btn{
+    background:none;
+    border:1.5px solid var(--present);
+    color:var(--present);
+    font-family:'IBM Plex Mono', monospace;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:9px 14px;
+    cursor:pointer;
+    border-radius:3px;
+    white-space:nowrap;
+  }
+  #guest-btn:hover{ background:var(--present); color:var(--ink); }
+
   #toast{
     position:fixed;
     left:50%;
@@ -398,6 +467,10 @@
     </div>
     <div id="auth-error"></div>
   </form>
+  <div class="row-gap" id="guest-row" style="margin-top:8px;">
+    <input type="text" id="guest-name" placeholder="Your name">
+    <button class="ghost" id="guest-btn" type="button">Play as Guest</button>
+  </div>
   <div id="userinfo">
     <span id="user-name"></span>
     <button id="signout-btn">Sign out</button>
@@ -413,9 +486,15 @@
       <option value="3">3 players</option>
       <option value="4" selected>4 players</option>
     </select>
+    <select id="max-turns">
+      <option value="20">20 turns</option>
+      <option value="30" selected>30 turns</option>
+      <option value="50">50 turns</option>
+      <option value="0">No limit</option>
+    </select>
     <button class="primary" id="create-room-btn">Create Room</button>
   </div>
-  <div class="hint">You'll get a code to share with friends.</div>
+  <div class="hint">You'll get a code to share with friends. If nobody's emptied their hand by the turn limit, the round just ends.</div>
 
   <h2 style="margin-top:24px;">Join a Room</h2>
   <div class="row-gap">
@@ -446,10 +525,16 @@
     <button class="primary" id="rematch-btn" style="display:none;">Play Again</button>
   </div>
 
+  <div id="turn-banner"></div>
+  <div id="turn-counter"></div>
   <div id="game-message"></div>
-  <div id="center-word"></div>
+  <div id="center-word-wrap">
+    <div id="center-word"></div>
+  </div>
   <div id="last-move"></div>
-  <div id="hand"></div>
+  <div id="hand-wrap">
+    <div id="hand"></div>
+  </div>
   <div id="blank-picker" style="display:none;"></div>
   <div class="hint">Tap a letter in your hand, then tap a tile in the word to swap it in. The ★ tile is a blank — it can stand for any letter.</div>
   <div class="row-gap" style="margin-top:14px;">
@@ -689,6 +774,14 @@ let armedHandIndex = null;
 let armedPos = null;
 let isHost = false;
 let lastRenderedCenterWord = null;
+let latestRoomData = null;
+let checkedTurnToken = null;
+let lastProcessedTurnToken = null;
+let announcedFinished = false;
+let heartbeatInterval = null;
+
+const HEARTBEAT_MS = 15000;
+const STALE_MS = 60000; // a player with no heartbeat in this long is treated as disconnected
 
 function shuffle(arr){
   const a = arr.slice();
@@ -697,6 +790,50 @@ function shuffle(arr){
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function clampIndex(idx, len){
+  if(len <= 0) return 0;
+  return Math.min(Math.max(idx, 0), len - 1);
+}
+
+// ---------- Sound effects (synthesized, no audio files needed) ----------
+
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) audioCtx = new AC();
+  }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+document.addEventListener('click', ensureAudio, { once: true });
+
+function playTone(freq, duration, type, volume, delay){
+  if(!audioCtx) return;
+  const startAt = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume || 0.15, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.001, startAt + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + duration + 0.02);
+}
+
+function playMoveSound(){ playTone(700, 0.1, 'triangle', 0.18, 0); }
+function playPassSound(){ playTone(300, 0.18, 'sine', 0.12, 0); }
+function playReshuffleSound(){
+  playTone(320, 0.2, 'sawtooth', 0.13, 0);
+  playTone(240, 0.25, 'sawtooth', 0.11, 0.1);
+}
+function playWinSound(){
+  playTone(523, 0.15, 'sine', 0.18, 0);
+  playTone(659, 0.15, 'sine', 0.18, 0.14);
+  playTone(784, 0.3, 'sine', 0.2, 0.28);
 }
 
 function makeRoomCode(){
@@ -716,7 +853,7 @@ function requireSignedIn(){
     return false;
   }
   if(!window.currentUser){
-    setLobbyError("Sign in first to play.");
+    setLobbyError("Sign in or play as a guest first.");
     return false;
   }
   return true;
@@ -728,17 +865,23 @@ document.getElementById('create-room-btn').addEventListener('click', async ()=>{
   setLobbyError("");
   if(!requireSignedIn()) return;
   const maxPlayers = parseInt(document.getElementById('max-players').value, 10);
+  const maxTurns = parseInt(document.getElementById('max-turns').value, 10) || null;
   const code = makeRoomCode();
   const ref = db.collection('slamRooms').doc(code);
-  const me = { uid: currentUser.uid, name: currentUser.displayName || 'Player' };
+  const me = { uid: currentUser.uid, name: currentUser.displayName || 'Player', lastSeen: Date.now() };
   try{
     await ref.set({
       hostUid: currentUser.uid,
       maxPlayers,
+      maxTurns, // null means no limit
       players: [me],
       playerUids: [currentUser.uid],
       status: 'waiting',
       centerWord: '',
+      currentTurnIndex: 0,
+      turnCount: 0,
+      passStreak: 0,
+      turnToken: 0,
       lastMove: null,
       winnerUid: null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -767,7 +910,7 @@ document.getElementById('join-room-btn').addEventListener('click', async ()=>{
       if(data.status !== 'waiting') throw new Error('already-started');
       if(data.playerUids.includes(currentUser.uid)) return; // already in
       if(data.players.length >= data.maxPlayers) throw new Error('full');
-      const me = { uid: currentUser.uid, name: currentUser.displayName || 'Player' };
+      const me = { uid: currentUser.uid, name: currentUser.displayName || 'Player', lastSeen: Date.now() };
       tx.update(ref, {
         players: [...data.players, me],
         playerUids: [...data.playerUids, currentUser.uid]
@@ -788,6 +931,72 @@ function enterRoom(code){
   document.getElementById('lobby-panel').style.display = 'none';
   document.getElementById('room-code-display').textContent = code;
   listenToRoom();
+  startHeartbeat();
+}
+
+// ---------- Presence: heartbeat + cleanup of disconnected players ----------
+
+function startHeartbeat(){
+  stopHeartbeat();
+  sendHeartbeat();
+  heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_MS);
+}
+
+function stopHeartbeat(){
+  if(heartbeatInterval){ clearInterval(heartbeatInterval); heartbeatInterval = null; }
+}
+
+async function sendHeartbeat(){
+  if(!roomRef || !currentUser) return;
+  try{
+    await db.runTransaction(async (tx)=>{
+      const doc = await tx.get(roomRef);
+      if(!doc.exists) return;
+      const data = doc.data();
+      const newPlayers = data.players.map(p=>
+        p.uid === currentUser.uid ? { ...p, lastSeen: Date.now() } : p
+      );
+      tx.update(roomRef, { players: newPlayers });
+    });
+  }catch(e){
+    console.warn('Heartbeat failed:', e);
+  }
+}
+
+async function reapStalePlayers(data){
+  if(!roomRef) return;
+  const now = Date.now();
+  const stale = data.players.filter(p => p.lastSeen && (now - p.lastSeen > STALE_MS));
+  if(stale.length === 0) return;
+  try{
+    await db.runTransaction(async (tx)=>{
+      const doc = await tx.get(roomRef);
+      if(!doc.exists) return;
+      const fresh = doc.data();
+      const now2 = Date.now();
+      const remaining = fresh.players.filter(p => !p.lastSeen || (now2 - p.lastSeen <= STALE_MS));
+      if(remaining.length === fresh.players.length) return; // someone already cleaned this up
+
+      if(remaining.length === 0){
+        tx.delete(roomRef);
+        return;
+      }
+
+      const update = {
+        players: remaining,
+        playerUids: remaining.map(p=>p.uid)
+      };
+      if(!remaining.find(p=>p.uid === fresh.hostUid)){
+        update.hostUid = remaining[0].uid;
+      }
+      if(fresh.status === 'playing' && typeof fresh.currentTurnIndex === 'number'){
+        update.currentTurnIndex = clampIndex(fresh.currentTurnIndex, remaining.length);
+      }
+      tx.update(roomRef, update);
+    });
+  }catch(e){
+    console.warn('Reap failed:', e);
+  }
 }
 
 // ---------- Room listener (drives lobby -> game transitions) ----------
@@ -800,6 +1009,7 @@ function listenToRoom(){
       return;
     }
     const data = doc.data();
+    latestRoomData = data;
     isHost = data.hostUid === currentUser.uid;
 
     if(data.status === 'waiting'){
@@ -807,6 +1017,8 @@ function listenToRoom(){
     } else if(data.status === 'playing' || data.status === 'finished'){
       showGame(data);
     }
+
+    reapStalePlayers(data);
   }, err=>{
     console.error('Room listener error:', err);
     setGameMessage("Lost connection to the room (" + err.code + "). Try reloading.");
@@ -828,13 +1040,14 @@ function showWaitingRoom(data){
 
   const startBtn = document.getElementById('start-game-btn');
   const hint = document.getElementById('waiting-hint');
+  const turnLimitNote = data.maxTurns ? (" · " + data.maxTurns + " turn limit") : " · no turn limit";
   if(isHost){
     startBtn.style.display = 'inline-block';
     startBtn.disabled = data.players.length < 2;
-    hint.textContent = data.players.length < 2 ? "Need at least 2 players to start." : "Ready when you are.";
+    hint.textContent = (data.players.length < 2 ? "Need at least 2 players to start." : "Ready when you are.") + turnLimitNote;
   } else {
     startBtn.style.display = 'none';
-    hint.textContent = "Waiting for the host to start…";
+    hint.textContent = "Waiting for the host to start…" + turnLimitNote;
   }
 }
 
@@ -865,7 +1078,7 @@ async function startGame(ref){
   players.forEach(p=>{
     const hand = deck.slice(idx, idx+7);
     idx += 7;
-    newPlayers.push({ uid: p.uid, name: p.name, handCount: hand.length, stuck: false });
+    newPlayers.push({ uid: p.uid, name: p.name, handCount: hand.length, lastSeen: p.lastSeen || Date.now() });
     const handRef = ref.collection('hands').doc(p.uid);
     batch.set(handRef, { letters: hand });
   });
@@ -874,11 +1087,19 @@ async function startGame(ref){
     status: 'playing',
     centerWord,
     players: newPlayers,
+    currentTurnIndex: 0,
+    turnCount: 0,
+    passStreak: 0,
+    turnToken: 0,
     lastMove: null,
-    winnerUid: null
+    winnerUid: null,
+    limitReached: false
   });
 
   lastRenderedCenterWord = null;
+  checkedTurnToken = null;
+  lastProcessedTurnToken = null;
+  announcedFinished = false;
   await batch.commit();
 }
 
@@ -888,25 +1109,54 @@ function showGame(data){
   document.getElementById('room-panel').style.display = 'none';
   document.getElementById('game-panel').style.display = 'block';
 
+  const myTurn = data.status === 'playing'
+    && data.players[data.currentTurnIndex]
+    && data.players[data.currentTurnIndex].uid === currentUser.uid;
+
   const list = document.getElementById('active-players');
   list.innerHTML = "";
-  data.players.forEach(p=>{
+  data.players.forEach((p, i)=>{
     const row = document.createElement('div');
-    row.className = 'player-row' + (p.uid === data.hostUid ? ' host' : '') + (p.uid === currentUser.uid ? ' you' : '');
-    const stuckTag = p.stuck ? ' <span class="stuck-tag">no moves</span>' : '';
-    row.innerHTML = '<span>'+escapeHtml(p.name)+(p.uid === currentUser.uid ? ' (you)' : '')+stuckTag+'</span><span class="count">'+p.handCount+' left</span>';
+    const isTurn = data.status === 'playing' && i === data.currentTurnIndex;
+    row.className = 'player-row'
+      + (p.uid === data.hostUid ? ' host' : '')
+      + (p.uid === currentUser.uid ? ' you' : '')
+      + (isTurn ? ' turn' : '');
+    row.innerHTML = '<span>'+escapeHtml(p.name)+(p.uid === currentUser.uid ? ' (you)' : '')+'</span><span class="count">'+p.handCount+' left</span>';
     list.appendChild(row);
   });
+
+  // Turn banner
+  const turnBanner = document.getElementById('turn-banner');
+  const turnCounter = document.getElementById('turn-counter');
+  if(data.status === 'playing'){
+    const turnPlayer = data.players[data.currentTurnIndex];
+    turnBanner.textContent = myTurn ? "Your turn!" : (turnPlayer ? turnPlayer.name + "'s turn" : "");
+    turnBanner.className = myTurn ? 'mine' : '';
+    turnCounter.textContent = data.maxTurns
+      ? "Turn " + (data.turnCount || 0) + " / " + data.maxTurns
+      : "Turn " + (data.turnCount || 0);
+  } else {
+    turnBanner.textContent = "";
+    turnCounter.textContent = "";
+  }
+
+  // Lock hand/word interaction when it isn't your turn
+  document.getElementById('hand-wrap').classList.toggle('locked', !myTurn);
+  document.getElementById('center-word-wrap').classList.toggle('locked', !myTurn);
 
   const wordChanged = lastRenderedCenterWord !== null && lastRenderedCenterWord !== data.centerWord;
   renderCenterWord(data.centerWord);
 
   const lastMoveEl = document.getElementById('last-move');
-  if(data.lastMove && data.lastMove.reshuffle){
+  const mv = data.lastMove;
+  if(mv && mv.type === 'reshuffle'){
     lastMoveEl.textContent = "No one had a move \u2014 the table reshuffled the word.";
-  } else if(data.lastMove){
-    const blankNote = data.lastMove.wasBlank ? " (blank)" : "";
-    lastMoveEl.textContent = data.lastMove.name + " played " + data.lastMove.letterIn + blankNote + " \u2192 " + data.lastMove.word;
+  } else if(mv && mv.type === 'pass'){
+    lastMoveEl.textContent = (mv.uid === currentUser.uid ? "You" : mv.name) + " had no valid move \u2014 turn passed.";
+  } else if(mv && mv.type === 'move'){
+    const blankNote = mv.wasBlank ? " (blank)" : "";
+    lastMoveEl.textContent = mv.name + " played " + mv.letterIn + blankNote + " \u2192 " + mv.word;
   } else {
     lastMoveEl.textContent = "";
   }
@@ -915,24 +1165,29 @@ function showGame(data){
     closeBlankPicker();
     armedHandIndex = null;
     armedPos = null;
-    if(data.lastMove && data.lastMove.reshuffle){
-      flashCenter('reshuffle');
-      showToast("No one had a playable letter \u2014 word reshuffled to " + data.centerWord + "!");
-    } else {
-      flashCenter('normal');
-    }
+    flashCenter(mv && mv.type === 'reshuffle' ? 'reshuffle' : 'normal');
   }
   lastRenderedCenterWord = data.centerWord;
+
+  announceEvent(data);
 
   const winBanner = document.getElementById('win-banner');
   const rematchBtn = document.getElementById('rematch-btn');
   if(data.status === 'finished'){
     winBanner.style.display = 'block';
-    const winner = data.players.find(p=>p.uid === data.winnerUid);
-    document.getElementById('win-text').textContent = winner
-      ? (winner.uid === currentUser.uid ? "You win! 🎉" : winner.name + " wins!")
-      : "Game over.";
+    const winner = data.winnerUid ? data.players.find(p=>p.uid === data.winnerUid) : null;
+    if(winner){
+      document.getElementById('win-text').textContent = winner.uid === currentUser.uid ? "You win! 🎉" : winner.name + " wins!";
+    } else if(data.limitReached){
+      document.getElementById('win-text').textContent = "Turn limit reached \u2014 no one emptied their hand.";
+    } else {
+      document.getElementById('win-text').textContent = "Game over.";
+    }
     rematchBtn.style.display = isHost ? 'inline-block' : 'none';
+    if(!announcedFinished){
+      announcedFinished = true;
+      playWinSound();
+    }
   } else {
     winBanner.style.display = 'none';
   }
@@ -947,13 +1202,13 @@ function showGame(data){
       armedHandIndex = null;
       armedPos = null;
       renderHand();
-      syncStuckStatus();
+      checkMyTurnAndAutopass();
     }, err=>{
       console.error('Hand listener error:', err);
       setGameMessage("Couldn't sync your hand (" + err.code + "). Try reloading.");
     });
   } else if(data.status === 'playing'){
-    syncStuckStatus();
+    checkMyTurnAndAutopass();
   }
 }
 
@@ -983,13 +1238,22 @@ function renderHand(){
   });
 }
 
+function isMyTurn(){
+  if(!latestRoomData || !currentUser) return false;
+  if(latestRoomData.status !== 'playing') return false;
+  const turnPlayer = latestRoomData.players[latestRoomData.currentTurnIndex];
+  return !!turnPlayer && turnPlayer.uid === currentUser.uid;
+}
+
 function onHandPicked(i){
+  if(!isMyTurn()) return;
   armedHandIndex = (armedHandIndex === i) ? null : i;
   renderHand();
   maybeAttemptSwap();
 }
 
 function onTilePicked(pos){
+  if(!isMyTurn()) return;
   armedPos = (armedPos === pos) ? null : pos;
   roomRef.get().then(doc=>renderCenterWord(doc.data().centerWord));
   maybeAttemptSwap();
@@ -1090,6 +1354,8 @@ async function attemptSwap(handIndex, pos, placeLetter){
       const cardPlayed = hand[handIndex]; // '?' for a blank, a plain letter otherwise
 
       if(data.status !== 'playing') throw new Error('not-playing');
+      const myIdx = data.players.findIndex(p=>p.uid === currentUser.uid);
+      if(myIdx === -1 || data.currentTurnIndex !== myIdx) throw new Error('not-your-turn');
       if(cardPlayed === undefined) throw new Error('letter-gone');
 
       const word = data.centerWord;
@@ -1102,13 +1368,21 @@ async function attemptSwap(handIndex, pos, placeLetter){
       newHand.splice(handIndex, 1);
 
       const newPlayers = data.players.map(p=>
-        p.uid === currentUser.uid ? { ...p, handCount: newHand.length, stuck: false } : p
+        p.uid === currentUser.uid ? { ...p, handCount: newHand.length } : p
       );
+
+      const nextIndex = (myIdx + 1) % newPlayers.length;
+      const newTurnCount = (data.turnCount || 0) + 1;
 
       const update = {
         centerWord: candidate,
         players: newPlayers,
+        currentTurnIndex: nextIndex,
+        turnCount: newTurnCount,
+        passStreak: 0,
+        turnToken: (data.turnToken || 0) + 1,
         lastMove: {
+          type: 'move',
           by: currentUser.uid,
           name: currentUser.displayName || 'Player',
           letterIn: placeLetter,
@@ -1120,12 +1394,15 @@ async function attemptSwap(handIndex, pos, placeLetter){
       if(newHand.length === 0){
         update.status = 'finished';
         update.winnerUid = currentUser.uid;
+      } else if(data.maxTurns && newTurnCount >= data.maxTurns){
+        update.status = 'finished';
+        update.winnerUid = null;
+        update.limitReached = true;
       }
 
       tx.update(roomRef, update);
       tx.update(myHandRef, { letters: newHand });
     });
-    flashCenter('normal');
   }catch(e){
     if(e.message === 'invalid-word'){
       setGameMessage("Not a word — try again.");
@@ -1133,6 +1410,9 @@ async function attemptSwap(handIndex, pos, placeLetter){
       setGameMessage("That letter's already there.");
     } else if(e.message === 'not-playing'){
       setGameMessage("Round's over.");
+    } else if(e.message === 'not-your-turn'){
+      setGameMessage("It's not your turn.");
+      clearArmed();
     } else {
       console.error(e);
       setGameMessage("Someone beat you to it — try again.");
@@ -1157,39 +1437,81 @@ function hasValidMove(hand, word){
   return false;
 }
 
-async function syncStuckStatus(){
-  if(!handLoaded || !roomRef || !myHandRef || !currentUser) return;
+// When it becomes my turn, check if I actually have a playable letter.
+// If not, automatically pass (after a short pause so the message is visible).
+function checkMyTurnAndAutopass(){
+  if(!handLoaded || !latestRoomData || !currentUser) return;
+  const data = latestRoomData;
+  if(data.status !== 'playing') return;
+  const myIdx = data.players.findIndex(p=>p.uid === currentUser.uid);
+  if(myIdx === -1 || data.currentTurnIndex !== myIdx) return; // not my turn
+
+  const token = data.turnToken;
+  if(checkedTurnToken === token) return; // already checked this exact turn
+  checkedTurnToken = token;
+
+  if(!hasValidMove(myHand, data.centerWord)){
+    setGameMessage("No valid move for you \u2014 passing your turn\u2026");
+    setTimeout(()=>{ passTurn(); }, 900);
+  } else {
+    setGameMessage("");
+  }
+}
+
+async function passTurn(){
+  if(!roomRef || !currentUser) return;
   try{
     await db.runTransaction(async (tx)=>{
-      const roomDoc = await tx.get(roomRef);
-      if(!roomDoc.exists) return;
-      const data = roomDoc.data();
+      const doc = await tx.get(roomRef);
+      if(!doc.exists) return;
+      const data = doc.data();
       if(data.status !== 'playing') return;
+      const idx = data.players.findIndex(p=>p.uid === currentUser.uid);
+      if(idx === -1 || data.currentTurnIndex !== idx) return; // no longer my turn, someone else already handled it
 
-      const word = data.centerWord;
-      const iAmStuck = !hasValidMove(myHand, word);
-      const me = data.players.find(p=>p.uid === currentUser.uid);
-      if(!me || me.stuck === iAmStuck) return; // nothing changed, skip the write
+      const nextIndex = (idx + 1) % data.players.length;
+      const newPassStreak = (data.passStreak || 0) + 1;
+      const newToken = (data.turnToken || 0) + 1;
 
-      const newPlayers = data.players.map(p=>
-        p.uid === currentUser.uid ? { ...p, stuck: iAmStuck } : p
-      );
-      const allStuck = newPlayers.length > 0 && newPlayers.every(p=>p.stuck === true);
+      const update = {
+        currentTurnIndex: nextIndex,
+        turnToken: newToken
+      };
 
-      if(allStuck){
+      if(newPassStreak >= data.players.length){
+        // Everyone in a row had no move — reshuffle the word.
         let newWord;
-        do{ newWord = WORDS4[Math.floor(Math.random() * WORDS4.length)]; } while(newWord === word);
-        tx.update(roomRef, {
-          centerWord: newWord,
-          players: newPlayers.map(p=>({ ...p, stuck: false })),
-          lastMove: { reshuffle: true, word: newWord }
-        });
+        do{ newWord = WORDS4[Math.floor(Math.random() * WORDS4.length)]; } while(newWord === data.centerWord);
+        update.centerWord = newWord;
+        update.passStreak = 0;
+        update.lastMove = { type: 'reshuffle', word: newWord };
       } else {
-        tx.update(roomRef, { players: newPlayers });
+        update.passStreak = newPassStreak;
+        update.lastMove = { type: 'pass', uid: currentUser.uid, name: currentUser.displayName || 'Player' };
       }
+
+      tx.update(roomRef, update);
     });
   }catch(e){
-    console.error('Stuck-status sync failed:', e);
+    console.error('Pass failed:', e);
+  }
+}
+
+// Fires a toast + sound exactly once per distinct turn event (keyed by turnToken),
+// independent of whether the center word actually changed.
+function announceEvent(data){
+  if(data.turnToken === undefined || data.turnToken === lastProcessedTurnToken) return;
+  lastProcessedTurnToken = data.turnToken;
+  const mv = data.lastMove;
+  if(!mv) return;
+  if(mv.type === 'pass'){
+    showToast((mv.uid === currentUser.uid ? "You" : mv.name) + " had no valid move \u2014 turn passed.");
+    playPassSound();
+  } else if(mv.type === 'reshuffle'){
+    showToast("No one could move \u2014 word reshuffled to " + data.centerWord + "!");
+    playReshuffleSound();
+  } else if(mv.type === 'move'){
+    playMoveSound();
   }
 }
 
@@ -1228,28 +1550,35 @@ document.getElementById('rematch-btn').addEventListener('click', async (e)=>{
 // ---------- Leaving ----------
 
 async function leaveRoom(){
+  stopHeartbeat();
   if(unsubRoom){ unsubRoom(); unsubRoom = null; }
   if(unsubHand){ unsubHand(); unsubHand = null; }
 
   if(roomRef && currentUser){
     try{
-      const doc = await roomRef.get();
-      if(doc.exists){
+      await db.runTransaction(async (tx)=>{
+        const doc = await tx.get(roomRef);
+        if(!doc.exists) return;
         const data = doc.data();
         const remaining = data.players.filter(p=>p.uid !== currentUser.uid);
+
         if(remaining.length === 0){
-          await roomRef.delete();
-        } else {
-          const update = {
-            players: remaining,
-            playerUids: data.playerUids.filter(u=>u !== currentUser.uid)
-          };
-          if(data.hostUid === currentUser.uid){
-            update.hostUid = remaining[0].uid;
-          }
-          await roomRef.update(update);
+          tx.delete(roomRef);
+          return;
         }
-      }
+
+        const update = {
+          players: remaining,
+          playerUids: data.playerUids.filter(u=>u !== currentUser.uid)
+        };
+        if(data.hostUid === currentUser.uid){
+          update.hostUid = remaining[0].uid;
+        }
+        if(data.status === 'playing' && typeof data.currentTurnIndex === 'number'){
+          update.currentTurnIndex = clampIndex(data.currentTurnIndex, remaining.length);
+        }
+        tx.update(roomRef, update);
+      });
     }catch(e){ console.warn(e); }
   }
   resetToLobby("");
@@ -1264,6 +1593,10 @@ function resetToLobby(msg){
   armedHandIndex = null;
   armedPos = null;
   lastRenderedCenterWord = null;
+  latestRoomData = null;
+  checkedTurnToken = null;
+  lastProcessedTurnToken = null;
+  announcedFinished = false;
   closeBlankPicker();
   document.getElementById('lobby-panel').style.display = 'block';
   document.getElementById('room-panel').style.display = 'none';
@@ -1275,6 +1608,14 @@ function resetToLobby(msg){
 document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
 document.getElementById('leave-game-btn').addEventListener('click', leaveRoom);
 
+// Best-effort cleanup if the tab is closed without clicking "Leave Room".
+// Not guaranteed to complete, but the heartbeat/reap system is the reliable backstop.
+window.addEventListener('pagehide', ()=>{
+  if(roomRef && currentUser){
+    leaveRoom();
+  }
+});
+
 function escapeHtml(str){
   const div = document.createElement('div');
   div.textContent = str;
@@ -1283,8 +1624,12 @@ function escapeHtml(str){
 
 document.addEventListener('authchange', (e)=>{
   if(!e.detail.user){
-    // signed out mid-session — just drop back to lobby view
-    resetToLobby("");
+    // signed out mid-session — leave the room properly (stops heartbeat, cleans up membership)
+    if(roomRef){
+      leaveRoom();
+    } else {
+      resetToLobby("");
+    }
   }
 });
 </script>
