@@ -204,6 +204,12 @@
     text-transform:uppercase;
     margin-left:6px;
   }
+  .tries-tag{
+    font-size:9px;
+    color:var(--absent);
+    letter-spacing:0.06em;
+    margin-left:6px;
+  }
 
   #center-word{
     display:flex;
@@ -328,15 +334,6 @@
   @keyframes pulseturn{
     0%, 100%{ opacity:1; }
     50%{ opacity:0.55; }
-  }
-
-  #turn-counter{
-    text-align:center;
-    font-size:10px;
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    color:var(--absent);
-    margin-bottom:10px;
   }
 
   #center-word-wrap.locked, #hand-wrap.locked{
@@ -486,15 +483,9 @@
       <option value="3">3 players</option>
       <option value="4" selected>4 players</option>
     </select>
-    <select id="max-turns">
-      <option value="20">20 turns</option>
-      <option value="30" selected>30 turns</option>
-      <option value="50">50 turns</option>
-      <option value="0">No limit</option>
-    </select>
     <button class="primary" id="create-room-btn">Create Room</button>
   </div>
-  <div class="hint">You'll get a code to share with friends. If nobody's emptied their hand by the turn limit, the round just ends.</div>
+  <div class="hint">You'll get a code to share with friends.</div>
 
   <h2 style="margin-top:24px;">Join a Room</h2>
   <div class="row-gap">
@@ -526,7 +517,6 @@
   </div>
 
   <div id="turn-banner"></div>
-  <div id="turn-counter"></div>
   <div id="game-message"></div>
   <div id="center-word-wrap">
     <div id="center-word"></div>
@@ -538,6 +528,7 @@
   <div id="blank-picker" style="display:none;"></div>
   <div class="hint">Tap a letter in your hand, then tap a tile in the word to swap it in. The ★ tile is a blank — it can stand for any letter.</div>
   <div class="row-gap" style="margin-top:14px;">
+    <button class="ghost" id="give-up-turn-btn" style="display:none;">Give Up Turn</button>
     <button class="ghost" id="leave-game-btn">Leave Room</button>
   </div>
 </div>
@@ -778,6 +769,7 @@ let latestRoomData = null;
 let checkedTurnToken = null;
 let lastProcessedTurnToken = null;
 let announcedFinished = false;
+let wasMyTurn = false;
 let heartbeatInterval = null;
 
 const HEARTBEAT_MS = 15000;
@@ -795,6 +787,11 @@ function shuffle(arr){
 function clampIndex(idx, len){
   if(len <= 0) return 0;
   return Math.min(Math.max(idx, 0), len - 1);
+}
+
+function nextTurnIndex(fromIndex, playerCount){
+  if(playerCount === 0) return 0;
+  return (fromIndex + 1) % playerCount;
 }
 
 // ---------- Sound effects (synthesized, no audio files needed) ----------
@@ -826,6 +823,15 @@ function playTone(freq, duration, type, volume, delay){
 
 function playMoveSound(){ playTone(700, 0.1, 'triangle', 0.18, 0); }
 function playPassSound(){ playTone(300, 0.18, 'sine', 0.12, 0); }
+function playInvalidSound(){
+  playTone(180, 0.15, 'sawtooth', 0.12, 0);
+  playTone(140, 0.18, 'sawtooth', 0.1, 0.08);
+}
+function playYourTurnSound(){
+  playTone(587, 0.1, 'sine', 0.15, 0);
+  playTone(784, 0.16, 'sine', 0.16, 0.09);
+}
+function playJoinSound(){ playTone(440, 0.08, 'triangle', 0.1, 0); }
 function playReshuffleSound(){
   playTone(320, 0.2, 'sawtooth', 0.13, 0);
   playTone(240, 0.25, 'sawtooth', 0.11, 0.1);
@@ -865,7 +871,6 @@ document.getElementById('create-room-btn').addEventListener('click', async ()=>{
   setLobbyError("");
   if(!requireSignedIn()) return;
   const maxPlayers = parseInt(document.getElementById('max-players').value, 10);
-  const maxTurns = parseInt(document.getElementById('max-turns').value, 10) || null;
   const code = makeRoomCode();
   const ref = db.collection('slamRooms').doc(code);
   const me = { uid: currentUser.uid, name: currentUser.displayName || 'Player', lastSeen: Date.now() };
@@ -873,13 +878,11 @@ document.getElementById('create-room-btn').addEventListener('click', async ()=>{
     await ref.set({
       hostUid: currentUser.uid,
       maxPlayers,
-      maxTurns, // null means no limit
       players: [me],
       playerUids: [currentUser.uid],
       status: 'waiting',
       centerWord: '',
       currentTurnIndex: 0,
-      turnCount: 0,
       passStreak: 0,
       turnToken: 0,
       lastMove: null,
@@ -1025,9 +1028,16 @@ function listenToRoom(){
   });
 }
 
+let lastKnownPlayerCount = 0;
+
 function showWaitingRoom(data){
   document.getElementById('room-panel').style.display = 'block';
   document.getElementById('game-panel').style.display = 'none';
+
+  if(lastKnownPlayerCount > 0 && data.players.length > lastKnownPlayerCount){
+    playJoinSound();
+  }
+  lastKnownPlayerCount = data.players.length;
 
   const list = document.getElementById('waiting-players');
   list.innerHTML = "";
@@ -1040,14 +1050,13 @@ function showWaitingRoom(data){
 
   const startBtn = document.getElementById('start-game-btn');
   const hint = document.getElementById('waiting-hint');
-  const turnLimitNote = data.maxTurns ? (" · " + data.maxTurns + " turn limit") : " · no turn limit";
   if(isHost){
     startBtn.style.display = 'inline-block';
     startBtn.disabled = data.players.length < 2;
-    hint.textContent = (data.players.length < 2 ? "Need at least 2 players to start." : "Ready when you are.") + turnLimitNote;
+    hint.textContent = data.players.length < 2 ? "Need at least 2 players to start." : "Ready when you are.";
   } else {
     startBtn.style.display = 'none';
-    hint.textContent = "Waiting for the host to start…" + turnLimitNote;
+    hint.textContent = "Waiting for the host to start…";
   }
 }
 
@@ -1088,18 +1097,17 @@ async function startGame(ref){
     centerWord,
     players: newPlayers,
     currentTurnIndex: 0,
-    turnCount: 0,
     passStreak: 0,
     turnToken: 0,
     lastMove: null,
-    winnerUid: null,
-    limitReached: false
+    winnerUid: null
   });
 
   lastRenderedCenterWord = null;
   checkedTurnToken = null;
   lastProcessedTurnToken = null;
   announcedFinished = false;
+  wasMyTurn = false;
   await batch.commit();
 }
 
@@ -1112,6 +1120,11 @@ function showGame(data){
   const myTurn = data.status === 'playing'
     && data.players[data.currentTurnIndex]
     && data.players[data.currentTurnIndex].uid === currentUser.uid;
+
+  if(myTurn && !wasMyTurn){
+    playYourTurnSound();
+  }
+  wasMyTurn = myTurn;
 
   const list = document.getElementById('active-players');
   list.innerHTML = "";
@@ -1128,17 +1141,15 @@ function showGame(data){
 
   // Turn banner
   const turnBanner = document.getElementById('turn-banner');
-  const turnCounter = document.getElementById('turn-counter');
+  const giveUpBtn = document.getElementById('give-up-turn-btn');
   if(data.status === 'playing'){
     const turnPlayer = data.players[data.currentTurnIndex];
     turnBanner.textContent = myTurn ? "Your turn!" : (turnPlayer ? turnPlayer.name + "'s turn" : "");
     turnBanner.className = myTurn ? 'mine' : '';
-    turnCounter.textContent = data.maxTurns
-      ? "Turn " + (data.turnCount || 0) + " / " + data.maxTurns
-      : "Turn " + (data.turnCount || 0);
+    giveUpBtn.style.display = myTurn ? 'inline-block' : 'none';
   } else {
     turnBanner.textContent = "";
-    turnCounter.textContent = "";
+    giveUpBtn.style.display = 'none';
   }
 
   // Lock hand/word interaction when it isn't your turn
@@ -1154,6 +1165,8 @@ function showGame(data){
     lastMoveEl.textContent = "No one had a move \u2014 the table reshuffled the word.";
   } else if(mv && mv.type === 'pass'){
     lastMoveEl.textContent = (mv.uid === currentUser.uid ? "You" : mv.name) + " had no valid move \u2014 turn passed.";
+  } else if(mv && mv.type === 'skip'){
+    lastMoveEl.textContent = (mv.uid === currentUser.uid ? "You" : mv.name) + " gave up their turn.";
   } else if(mv && mv.type === 'move'){
     const blankNote = mv.wasBlank ? " (blank)" : "";
     lastMoveEl.textContent = mv.name + " played " + mv.letterIn + blankNote + " \u2192 " + mv.word;
@@ -1176,13 +1189,9 @@ function showGame(data){
   if(data.status === 'finished'){
     winBanner.style.display = 'block';
     const winner = data.winnerUid ? data.players.find(p=>p.uid === data.winnerUid) : null;
-    if(winner){
-      document.getElementById('win-text').textContent = winner.uid === currentUser.uid ? "You win! 🎉" : winner.name + " wins!";
-    } else if(data.limitReached){
-      document.getElementById('win-text').textContent = "Turn limit reached \u2014 no one emptied their hand.";
-    } else {
-      document.getElementById('win-text').textContent = "Game over.";
-    }
+    document.getElementById('win-text').textContent = winner
+      ? (winner.uid === currentUser.uid ? "You win! 🎉" : winner.name + " wins!")
+      : "Game over.";
     rematchBtn.style.display = isHost ? 'inline-block' : 'none';
     if(!announcedFinished){
       announcedFinished = true;
@@ -1303,6 +1312,7 @@ async function openBlankPicker(handIndex, pos){
 
   if(options.length === 0){
     setGameMessage("No word fits there with a blank — try a different letter or spot.");
+    playInvalidSound();
     clearArmed();
     return;
   }
@@ -1371,14 +1381,9 @@ async function attemptSwap(handIndex, pos, placeLetter){
         p.uid === currentUser.uid ? { ...p, handCount: newHand.length } : p
       );
 
-      const nextIndex = (myIdx + 1) % newPlayers.length;
-      const newTurnCount = (data.turnCount || 0) + 1;
-
       const update = {
         centerWord: candidate,
         players: newPlayers,
-        currentTurnIndex: nextIndex,
-        turnCount: newTurnCount,
         passStreak: 0,
         turnToken: (data.turnToken || 0) + 1,
         lastMove: {
@@ -1394,10 +1399,8 @@ async function attemptSwap(handIndex, pos, placeLetter){
       if(newHand.length === 0){
         update.status = 'finished';
         update.winnerUid = currentUser.uid;
-      } else if(data.maxTurns && newTurnCount >= data.maxTurns){
-        update.status = 'finished';
-        update.winnerUid = null;
-        update.limitReached = true;
+      } else {
+        update.currentTurnIndex = nextTurnIndex(myIdx, newPlayers.length);
       }
 
       tx.update(roomRef, update);
@@ -1406,8 +1409,10 @@ async function attemptSwap(handIndex, pos, placeLetter){
   }catch(e){
     if(e.message === 'invalid-word'){
       setGameMessage("Not a word — try again.");
+      playInvalidSound();
     } else if(e.message === 'no-change'){
       setGameMessage("That letter's already there.");
+      playInvalidSound();
     } else if(e.message === 'not-playing'){
       setGameMessage("Round's over.");
     } else if(e.message === 'not-your-turn'){
@@ -1452,13 +1457,22 @@ function checkMyTurnAndAutopass(){
 
   if(!hasValidMove(myHand, data.centerWord)){
     setGameMessage("No valid move for you \u2014 passing your turn\u2026");
-    setTimeout(()=>{ passTurn(); }, 900);
+    setTimeout(()=>{ passTurn('no-move'); }, 900);
   } else {
     setGameMessage("");
   }
 }
 
-async function passTurn(){
+function giveUpTurn(){
+  if(!isMyTurn()) return;
+  clearArmed();
+  closeBlankPicker();
+  setGameMessage("");
+  passTurn('skip');
+}
+
+async function passTurn(reason){
+  reason = reason || 'no-move';
   if(!roomRef || !currentUser) return;
   try{
     await db.runTransaction(async (tx)=>{
@@ -1469,17 +1483,12 @@ async function passTurn(){
       const idx = data.players.findIndex(p=>p.uid === currentUser.uid);
       if(idx === -1 || data.currentTurnIndex !== idx) return; // no longer my turn, someone else already handled it
 
-      const nextIndex = (idx + 1) % data.players.length;
       const newPassStreak = (data.passStreak || 0) + 1;
       const newToken = (data.turnToken || 0) + 1;
-
-      const update = {
-        currentTurnIndex: nextIndex,
-        turnToken: newToken
-      };
+      const update = { turnToken: newToken };
 
       if(newPassStreak >= data.players.length){
-        // Everyone in a row had no move — reshuffle the word.
+        // Everyone in a row had no move (or gave up) — reshuffle the word.
         let newWord;
         do{ newWord = WORDS4[Math.floor(Math.random() * WORDS4.length)]; } while(newWord === data.centerWord);
         update.centerWord = newWord;
@@ -1487,8 +1496,10 @@ async function passTurn(){
         update.lastMove = { type: 'reshuffle', word: newWord };
       } else {
         update.passStreak = newPassStreak;
-        update.lastMove = { type: 'pass', uid: currentUser.uid, name: currentUser.displayName || 'Player' };
+        update.lastMove = { type: reason === 'skip' ? 'skip' : 'pass', uid: currentUser.uid, name: currentUser.displayName || 'Player' };
       }
+
+      update.currentTurnIndex = nextTurnIndex(idx, data.players.length);
 
       tx.update(roomRef, update);
     });
@@ -1496,6 +1507,8 @@ async function passTurn(){
     console.error('Pass failed:', e);
   }
 }
+
+document.getElementById('give-up-turn-btn').addEventListener('click', giveUpTurn);
 
 // Fires a toast + sound exactly once per distinct turn event (keyed by turnToken),
 // independent of whether the center word actually changed.
@@ -1506,6 +1519,9 @@ function announceEvent(data){
   if(!mv) return;
   if(mv.type === 'pass'){
     showToast((mv.uid === currentUser.uid ? "You" : mv.name) + " had no valid move \u2014 turn passed.");
+    playPassSound();
+  } else if(mv.type === 'skip'){
+    showToast((mv.uid === currentUser.uid ? "You" : mv.name) + " gave up their turn.");
     playPassSound();
   } else if(mv.type === 'reshuffle'){
     showToast("No one could move \u2014 word reshuffled to " + data.centerWord + "!");
@@ -1597,6 +1613,8 @@ function resetToLobby(msg){
   checkedTurnToken = null;
   lastProcessedTurnToken = null;
   announcedFinished = false;
+  wasMyTurn = false;
+  lastKnownPlayerCount = 0;
   closeBlankPicker();
   document.getElementById('lobby-panel').style.display = 'block';
   document.getElementById('room-panel').style.display = 'none';

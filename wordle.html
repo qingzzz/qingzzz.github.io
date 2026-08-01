@@ -789,6 +789,55 @@ let gameOver = false;
 let edition = 1;
 let gameStartTime = null;
 
+// ---------- Sound effects (synthesized, no audio files needed) ----------
+
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) audioCtx = new AC();
+  }
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+document.addEventListener('click', ensureAudio, { once: true });
+document.addEventListener('keydown', ensureAudio, { once: true });
+
+function playTone(freq, duration, type, volume, delay){
+  if(!audioCtx) return;
+  const startAt = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume || 0.15, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.001, startAt + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + duration + 0.02);
+}
+
+function playKeySound(){ playTone(500, 0.045, 'square', 0.06, 0); }
+function playBackspaceSound(){ playTone(320, 0.05, 'square', 0.06, 0); }
+function playInvalidSound(){
+  playTone(180, 0.15, 'sawtooth', 0.12, 0);
+  playTone(140, 0.18, 'sawtooth', 0.1, 0.08);
+}
+function playTileSound(state){
+  if(state === 'correct') playTone(660, 0.13, 'triangle', 0.16, 0);
+  else if(state === 'present') playTone(480, 0.11, 'triangle', 0.13, 0);
+  else playTone(260, 0.09, 'triangle', 0.08, 0);
+}
+function playWinSound(){
+  playTone(523, 0.15, 'sine', 0.18, 0);
+  playTone(659, 0.15, 'sine', 0.18, 0.14);
+  playTone(784, 0.3, 'sine', 0.2, 0.28);
+}
+function playLoseSound(){
+  playTone(300, 0.22, 'sine', 0.14, 0);
+  playTone(220, 0.3, 'sine', 0.13, 0.18);
+}
+
 const board = document.getElementById('board');
 const message = document.getElementById('message');
 const editionEl = document.getElementById('edition');
@@ -905,9 +954,11 @@ function handleKey(k){
   if(k === "ENTER"){
     submitGuess();
   } else if(k === "BACK"){
+    if(currentGuess.length > 0) playBackspaceSound();
     currentGuess = currentGuess.slice(0,-1);
     renderCurrentRow();
   } else if(/^[A-Z]$/.test(k) && currentGuess.length < ANSWER_LEN){
+    playKeySound();
     currentGuess += k;
     renderCurrentRow();
   }
@@ -925,6 +976,7 @@ function renderCurrentRow(){
 function shakeRow(){
   const row = document.getElementById('row-'+currentRow);
   row.classList.add('shake');
+  playInvalidSound();
   setTimeout(()=>row.classList.remove('shake'), 400);
 }
 
@@ -976,6 +1028,7 @@ function animateRow(result){
       tile.classList.add('flip');
       setTimeout(()=>{
         tile.classList.add(result[c]);
+        playTileSound(result[c]);
       }, 275);
     }, c*280);
   }
@@ -1002,6 +1055,7 @@ function animateRow(result){
     if(currentGuess === answer){
       gameOver = true;
       stopTimer();
+      playWinSound();
       const tries = currentRow + 1;
       const timeSeconds = (Date.now() - gameStartTime) / 1000;
       timerEl.textContent = formatTime(timeSeconds);
@@ -1017,6 +1071,7 @@ function animateRow(result){
     } else if(currentRow === MAX_TRIES-1){
       gameOver = true;
       stopTimer();
+      playLoseSound();
       setMessage("Out of tries. The word was " + answer + ".");
       showDefinition(answer);
     } else {
