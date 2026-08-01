@@ -912,23 +912,40 @@ function setMessage(text){
   message.textContent = text;
 }
 
+async function fetchDefinitionOnce(word){
+  const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + word.toLowerCase());
+  if(!res.ok) throw new Error('lookup failed');
+  const data = await res.json();
+  const meaning = data[0] && data[0].meanings && data[0].meanings[0];
+  const def = meaning && meaning.definitions && meaning.definitions[0] && meaning.definitions[0].definition;
+  const pos = meaning && meaning.partOfSpeech;
+  return def ? { def, pos } : null;
+}
+
 async function showDefinition(word){
   const el = document.getElementById('definition');
   el.textContent = "Looking up " + word + "…";
+
+  let result = null;
+  let failed = false;
   try{
-    const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + word.toLowerCase());
-    if(!res.ok) throw new Error('not found');
-    const data = await res.json();
-    const meaning = data[0] && data[0].meanings && data[0].meanings[0];
-    const def = meaning && meaning.definitions && meaning.definitions[0] && meaning.definitions[0].definition;
-    const pos = meaning && meaning.partOfSpeech;
-    if(def){
-      el.innerHTML = '<span class="dword">' + word.charAt(0) + word.slice(1).toLowerCase() + '</span>' +
-        (pos ? ' <em>(' + pos + ')</em> — ' : ' — ') + def;
-    } else {
-      el.textContent = "";
-    }
+    result = await fetchDefinitionOnce(word);
   }catch(e){
+    // Free dictionary API can hiccup transiently — wait a beat and try once more.
+    try{
+      await new Promise(r => setTimeout(r, 900));
+      result = await fetchDefinitionOnce(word);
+    }catch(e2){
+      failed = true;
+    }
+  }
+
+  if(result){
+    el.innerHTML = '<span class="dword">' + word.charAt(0) + word.slice(1).toLowerCase() + '</span>' +
+      (result.pos ? ' <em>(' + result.pos + ')</em> — ' : ' — ') + result.def;
+  } else if(failed){
+    el.textContent = "Couldn't load a definition for " + word + " right now.";
+  } else {
     el.textContent = "";
   }
 }
